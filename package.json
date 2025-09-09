@@ -96,6 +96,13 @@
         "enablement": "miisync.enabled  && miisync.loggedin"
       },
       {
+        "command": "miisync.uploadwithpath",
+        "title": "Update on Server...",
+        "icon": "$(arrow-up)",
+        "category": "mii",
+        "enablement": "miisync.enabled  && miisync.loggedin"
+      },
+      {
         "command": "miisync.downloadbroad",
         "title": "Download",
         "icon": "$(arrow-down)",
@@ -339,7 +346,7 @@
           "when": "miisync.enabled && resourceFilename =~ /index.*html/"
         },
         {
-          "command": "miisync.uploadbroad",
+          "command": "miisync.uploadwithpath",
           "group": "ma@0",
           "when": "miisync.enabled"
         },

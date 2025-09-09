@@ -3,7 +3,7 @@ import { Uri, window } from "vscode";
 import { Severity, System, UserConfig } from "../extension/system";
 import { DoesFileExist, DoesFolderExist } from "../transfer/gate";
 import { ComplexFolder } from "../types/miisync";
-import { GetRemotePath } from "./file";
+import { GetRemotePath, GetRemotePathWithMapping } from "./file";
 
 export enum SeverityOperation { 'upload', 'download', 'delete', 'transfer' };
 type SimpleAction = (message: string) => Promise<boolean>;
@@ -76,6 +76,22 @@ export async function CheckSeverityFile(uri: Uri, type: SeverityOperation, userC
     const remotePath = GetRemotePath(uri.fsPath, userConfig);
     const name = path.basename(uri.fsPath);
 
+    // Para upload, usa nossa confirmação personalizada que mostra o caminho
+    if (type === SeverityOperation.upload) {
+        // Verifica se precisa de confirmação baseado na severidade
+        const handler = SeverityHandlers[system.severity];
+        const handlerType = handler[type];
+        
+        // Se é low severity, não mostra confirmação
+        if (handlerType === ShowNothing) {
+            return true;
+        }
+        
+        // Para outras severidades, usa nossa confirmação personalizada
+        return await ShowUploadConfirmationWithPath(uri.fsPath, userConfig, system);
+    }
+
+    // Para outras operações, usa o sistema original
     const handler = SeverityHandlers[system.severity];
     const handlerType = handler[type];
 
@@ -99,6 +115,21 @@ export async function CheckSeverityFolder(uri: Uri, type: SeverityOperation, use
     const remotePath = GetRemotePath(uri.fsPath, userConfig);
     const name = path.basename(uri.fsPath);
 
+    // Para upload de pasta, usa nossa confirmação personalizada que mostra o caminho
+    if (type === SeverityOperation.upload) {
+        const handler = SeverityHandlers[system.severity];
+        const handlerType = handler[type];
+        
+        // Se é low severity, não mostra confirmação
+        if (handlerType === ShowNothing) {
+            return true;
+        }
+        
+        // Para outras severidades, usa nossa confirmação personalizada
+        return await ShowUploadConfirmationWithPath(uri.fsPath, userConfig, system);
+    }
+
+    // Para outras operações, usa o sistema original
     const handler = SeverityHandlers[system.severity];
     const handlerType = handler[type];
 
@@ -142,4 +173,31 @@ async function ShowSideConfirmation(message: string) {
     const result = await window.showWarningMessage(message, { modal: false }, { title: confirmLabel }, { title: cancelLabel });
 
     return (result != null && result.title === confirmLabel);
+}
+
+/**
+ * Confirmação personalizada para upload que mostra o caminho de destino
+ */
+async function ShowUploadConfirmationWithPath(filePath: string, userConfig: UserConfig, system: System) {
+    try {
+        const fileName = path.basename(filePath);
+        const remotePath = await GetRemotePathWithMapping(filePath, userConfig);
+        
+        const action = await window.showInformationMessage(
+            `🚀 Upload "${fileName}"`,
+            { 
+                detail: `Destino: ${remotePath}\nServidor: ${system.name}`, 
+                modal: true 
+            },
+            "✅ Confirmar",
+            "❌ Cancelar"
+        );
+
+        return action === "✅ Confirmar";
+    } catch (error) {
+        console.error('Erro ao obter caminho remoto para confirmação:', error);
+        // Fallback para confirmação tradicional
+        const message = `Are you sure you want to upload ${path.basename(filePath)}?\nTarget: ${system.name}`;
+        return await ShowModalConfirmation(message);
+    }
 }
