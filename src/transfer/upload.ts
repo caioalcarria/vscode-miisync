@@ -6,10 +6,60 @@ import { readFileService } from "../miiservice/readfileservice";
 import { saveFileService } from "../miiservice/savefileservice";
 import { IsFatalResponse } from "../miiservice/abstract/filters";
 import { GetRemotePathWithMapping, PrepareUrisForService } from "../modules/file";
+import { PathMappingManager } from "../modules/pathmapping";
 import { CheckSeverity, CheckSeverityFile, CheckSeverityFolder, SeverityOperation } from '../modules/severity';
 import { ActionReturn, ActionType, StartAction } from './action';
 import { Validate } from "./gate";
 import { UploadComplexLimited } from './limited/uploadcomplex';
+
+/**
+ * Atualiza o path-mapping.json quando um novo arquivo é adicionado com sucesso
+ */
+async function updatePathMappingForNewFile(localFilePath: string, remotePath: string): Promise<void> {
+    try {
+        // Busca por um arquivo de mapeamento na hierarquia de diretórios
+        const mappingInfo = await PathMappingManager.findMappingConfig(localFilePath);
+        
+        if (mappingInfo) {
+            const { config, rootPath } = mappingInfo;
+            
+            // Calcula o caminho relativo do novo arquivo em relação ao diretório raiz mapeado
+            const relativePath = path.relative(rootPath, localFilePath);
+            
+            // Verifica se este arquivo já está mapeado
+            const existingMapping = config.mappings.find(m => m.localPath === relativePath);
+            
+            if (!existingMapping) {
+                // Adiciona o novo mapeamento
+                await PathMappingManager.addMapping(rootPath, relativePath, remotePath);
+                
+                const fileName = path.basename(localFilePath);
+                console.log(`📝 Mapeamento atualizado: ${fileName} → ${remotePath}`);
+                
+                window.showInformationMessage(
+                    `📝 Mapeamento atualizado: "${fileName}"`,
+                    { detail: `Novo arquivo mapeado: ${relativePath} → ${remotePath}` }
+                );
+            } else {
+                // Atualiza mapeamento existente se o caminho remoto mudou
+                if (existingMapping.remotePath !== remotePath) {
+                    await PathMappingManager.addMapping(rootPath, relativePath, remotePath);
+                    
+                    const fileName = path.basename(localFilePath);
+                    console.log(`🔄 Mapeamento atualizado: ${fileName} → ${remotePath} (era: ${existingMapping.remotePath})`);
+                    
+                    window.showInformationMessage(
+                        `🔄 Mapeamento atualizado: "${fileName}"`,
+                        { detail: `Caminho remoto atualizado para: ${remotePath}` }
+                    );
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao atualizar mapeamento:', error);
+        // Não aborta o upload se não conseguir atualizar o mapeamento
+    }
+}
 
 /**
  * Verifica se o upload foi bem-sucedido comparando o arquivo local com o do servidor
@@ -113,6 +163,14 @@ export async function UploadFile(uri: Uri, userConfig: UserConfig, system: Syste
                 return { aborted: false, error: true, message: "Upload concluído mas verificação falhou" };
             } else {
                 console.log(`✅ Upload verificado com sucesso em ${duration}ms: ${fileName}`);
+                
+                // Atualiza o mapeamento se estiver em um diretório mapeado
+                try {
+                    await updatePathMappingForNewFile(uri.fsPath, sourcePath);
+                } catch (error) {
+                    console.error('Erro ao atualizar mapeamento:', error);
+                    // Não aborta o upload se não conseguir atualizar o mapeamento
+                }
             }
         } catch (error) {
             console.error('Erro na verificação de integridade:', error);
