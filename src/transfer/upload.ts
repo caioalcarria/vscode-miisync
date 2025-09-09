@@ -8,6 +8,7 @@ import { IsFatalResponse } from "../miiservice/abstract/filters";
 import { GetRemotePathWithMapping, PrepareUrisForService } from "../modules/file";
 import { PathMappingManager } from "../modules/pathmapping";
 import { CheckSeverity, CheckSeverityFile, CheckSeverityFolder, SeverityOperation } from '../modules/severity';
+import { localProjectsTree } from '../ui/treeview/localprojectstree';
 import { ActionReturn, ActionType, StartAction } from './action';
 import { Validate } from "./gate";
 import { UploadComplexLimited } from './limited/uploadcomplex';
@@ -15,7 +16,7 @@ import { UploadComplexLimited } from './limited/uploadcomplex';
 /**
  * Atualiza o path-mapping.json quando um novo arquivo é adicionado com sucesso
  */
-async function updatePathMappingForNewFile(localFilePath: string, remotePath: string): Promise<void> {
+async function updatePathMappingForNewFile(localFilePath: string, remotePath: string, fileContent?: string): Promise<void> {
     try {
         // Busca por um arquivo de mapeamento na hierarquia de diretórios
         const mappingInfo = await PathMappingManager.findMappingConfig(localFilePath);
@@ -29,9 +30,15 @@ async function updatePathMappingForNewFile(localFilePath: string, remotePath: st
             // Verifica se este arquivo já está mapeado
             const existingMapping = config.mappings.find(m => m.localPath === relativePath);
             
+            // Lê o conteúdo do arquivo se não foi fornecido
+            let content = fileContent;
+            if (!content && await pathExists(localFilePath)) {
+                content = await readFile(localFilePath, 'utf8');
+            }
+            
             if (!existingMapping) {
-                // Adiciona o novo mapeamento
-                await PathMappingManager.addMapping(rootPath, relativePath, remotePath);
+                // Adiciona o novo mapeamento com hash
+                await PathMappingManager.addMapping(rootPath, relativePath, remotePath, content);
                 
                 const fileName = path.basename(localFilePath);
                 console.log(`📝 Mapeamento atualizado: ${fileName} → ${remotePath}`);
@@ -41,23 +48,20 @@ async function updatePathMappingForNewFile(localFilePath: string, remotePath: st
                     { detail: `Novo arquivo mapeado: ${relativePath} → ${remotePath}` }
                 );
             } else {
-                // Atualiza mapeamento existente se o caminho remoto mudou
-                if (existingMapping.remotePath !== remotePath) {
-                    await PathMappingManager.addMapping(rootPath, relativePath, remotePath);
-                    
-                    const fileName = path.basename(localFilePath);
-                    console.log(`🔄 Mapeamento atualizado: ${fileName} → ${remotePath} (era: ${existingMapping.remotePath})`);
-                    
-                    window.showInformationMessage(
-                        `🔄 Mapeamento atualizado: "${fileName}"`,
-                        { detail: `Caminho remoto atualizado para: ${remotePath}` }
-                    );
-                }
+                // Atualiza mapeamento existente (caminho remoto ou hash)
+                await PathMappingManager.addMapping(rootPath, relativePath, remotePath, content);
+                
+                const fileName = path.basename(localFilePath);
+                console.log(`🔄 Mapeamento atualizado: ${fileName} → ${remotePath}`);
+                
+                window.showInformationMessage(
+                    `🔄 Mapeamento atualizado: "${fileName}"`,
+                    { detail: `Arquivo sincronizado: ${relativePath} → ${remotePath}` }
+                );
             }
         }
     } catch (error) {
-        console.error('Erro ao atualizar mapeamento:', error);
-        // Não aborta o upload se não conseguir atualizar o mapeamento
+        console.error('❌ Erro ao atualizar path-mapping:', error);
     }
 }
 
@@ -166,7 +170,11 @@ export async function UploadFile(uri: Uri, userConfig: UserConfig, system: Syste
                 
                 // Atualiza o mapeamento se estiver em um diretório mapeado
                 try {
-                    await updatePathMappingForNewFile(uri.fsPath, sourcePath);
+                    await updatePathMappingForNewFile(uri.fsPath, sourcePath, content);
+                    
+                    // Refresh da tree view Local Projects para remover o arquivo da lista
+                    localProjectsTree.refresh();
+                    
                 } catch (error) {
                     console.error('Erro ao atualizar mapeamento:', error);
                     // Não aborta o upload se não conseguir atualizar o mapeamento

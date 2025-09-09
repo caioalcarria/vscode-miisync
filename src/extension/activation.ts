@@ -20,12 +20,15 @@ import { OnCommandUploadBroad } from '../commands/commanduploadbroad';
 import { OnCommandUploadWithPath } from '../commands/commanduploadwithpath';
 import { OnCommandCopyServerPath } from '../commands/commandcopyserverpath';
 import { OnCommandUploadWorkspace } from '../commands/commanduploadworkspace';
+import { OnCommandRefreshLocalProjects } from '../commands/commandrefreshlocalprojects';
+import { OnCommandUploadModifiedFile } from '../commands/commanduploadmodifiedfile';
+import { OnCommandShowFileDiff } from '../commands/commandshowfilediff';
 import { OnDidChangeActiveTextEditor } from '../events/changeactivettexteditor';
 import { onDidChangeConfiguration } from '../events/changeconfiguration';
 import { OnDidOpenTextDocument } from '../events/opentextdocument';
 import { OnDidSaveTextDocument } from '../events/savetextdocument';
-import { filePropertiesTree } from '../ui/treeview/filepropertiestree';
 import { remoteDirectoryTree } from '../ui/treeview/remotedirectorytree';
+import { localProjectsTree } from '../ui/treeview/localprojectstree';
 import transactionPropertiesVirtualDoc from '../ui/virtualdocument/transactionproperties';
 
 
@@ -70,11 +73,16 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 	RegisterCommand('miisync.transferworkspace', OnCommandTransferWorkspace, context);
 	RegisterCommand('miisync.deleteworkspace', OnCommandDeleteWorkspace, context);
 
+	// Local Projects Commands
+	RegisterCommand('miisync.refreshlocalprojects', OnCommandRefreshLocalProjects, context);
+	RegisterCommand('miisync.uploadmodifiedfile', OnCommandUploadModifiedFile, context);
+	RegisterCommand('miisync.showfilediff', OnCommandShowFileDiff, context);
+
 }
 
 
 export function activateTree({ subscriptions }: vscode.ExtensionContext) {
-	subscriptions.push(vscode.window.registerTreeDataProvider('fileproperties', filePropertiesTree));
+	subscriptions.push(vscode.window.registerTreeDataProvider('localprojects', localProjectsTree));
 	subscriptions.push(vscode.window.registerTreeDataProvider('remotedirectory', remoteDirectoryTree));
 	subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('transactionproperties', transactionPropertiesVirtualDoc));
 }

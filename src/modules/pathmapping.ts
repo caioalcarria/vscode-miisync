@@ -1,5 +1,6 @@
 import { ensureDir, pathExists, readFile, writeFile } from "fs-extra";
 import * as path from "path";
+import * as crypto from "crypto";
 
 /**
  * Interface para armazenar o mapeamento entre caminhos locais e remotos
@@ -11,6 +12,8 @@ export interface PathMapping {
   remotePath: string;
   /** Timestamp da última atualização */
   lastUpdated: number;
+  /** Hash SHA-256 do conteúdo do arquivo para detectar modificações */
+  contentHash?: string;
 }
 
 /**
@@ -111,11 +114,21 @@ export class PathMappingManager {
   static async addMapping(
     rootLocalPath: string,
     localPath: string,
-    remotePath: string
+    remotePath: string,
+    fileContent?: string
   ): Promise<void> {
     const config = await this.loadMappingFile(rootLocalPath);
     if (!config) {
       throw new Error("Arquivo de mapeamento não encontrado");
+    }
+
+    // Calcula hash do conteúdo se fornecido
+    let contentHash: string | undefined;
+    if (fileContent !== undefined) {
+      contentHash = this.calculateContentHash(fileContent);
+      
+      // Cria backup do conteúdo original
+      await this.createFileBackup(rootLocalPath, localPath, fileContent);
     }
 
     // Remove mapeamento existente se houver
@@ -131,10 +144,41 @@ export class PathMappingManager {
       localPath,
       remotePath,
       lastUpdated: Date.now(),
+      contentHash
     });
 
     const configFilePath = this.getConfigFilePath(rootLocalPath);
     await writeFile(configFilePath, JSON.stringify(config, null, 2), "utf8");
+  }
+
+  /**
+   * Calcula hash SHA-256 do conteúdo
+   */
+  static calculateContentHash(content: string): string {
+    return crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+  }
+
+  /**
+   * Cria backup do conteúdo original do arquivo
+   */
+  static async createFileBackup(
+    rootLocalPath: string,
+    localPath: string,
+    content: string
+  ): Promise<void> {
+    try {
+      const backupDir = path.join(rootLocalPath, CONFIG_FOLDER_NAME, 'backup');
+      const backupFilePath = path.join(backupDir, localPath);
+      
+      // Garante que o diretório existe
+      await ensureDir(path.dirname(backupFilePath));
+      
+      // Salva conteúdo original
+      await writeFile(backupFilePath, content, 'utf8');
+    } catch (error) {
+      console.error('❌ Erro ao criar backup do arquivo:', error);
+      // Não falha o processo se backup falhar
+    }
   }
 
   /**

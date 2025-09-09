@@ -79,15 +79,36 @@ export async function DownloadComplexLimited(
       pathMappings.length > 0
     ) {
       try {
+        // Cria mapeamentos com hash do conteúdo
+        const mappingsWithHash = await Promise.all(
+          pathMappings.map(async (m: any) => {
+            let contentHash: string | undefined;
+            
+            // Se temos o conteúdo, cria backup e calcula hash
+            if (m.fileContent) {
+              try {
+                await PathMappingManager.createFileBackup(rootLocalPath, m.localPath, m.fileContent);
+                contentHash = PathMappingManager.calculateContentHash(m.fileContent);
+              } catch (error) {
+                console.error('❌ Erro ao processar arquivo para mapeamento:', error);
+              }
+            }
+
+            return {
+              localPath: m.localPath,
+              remotePath: m.remotePath,
+              lastUpdated: Date.now(),
+              contentHash
+            };
+          })
+        );
+
         await PathMappingManager.createMappingFile(
           rootLocalPath,
           rootRemotePath,
-          pathMappings.map((m) => ({
-            localPath: m.localPath,
-            remotePath: m.remotePath,
-            lastUpdated: Date.now(),
-          }))
+          mappingsWithHash
         );
+        
         logger.info(
           `Arquivo de mapeamento criado em: ${rootLocalPath}/.miisync/path-mapping.json`
         );
@@ -258,9 +279,25 @@ export async function DownloadComplexLimited(
         (row) => row.Name == "Payload"
       );
       if (payload) {
+        const fileContent = Buffer.from(payload.Value, "base64").toString('utf8');
+        
+        // Salva o arquivo
         outputFile(localFilePath, Buffer.from(payload.Value, "base64"), {
           encoding: "utf8",
         }).catch((error) => logger.error(error));
+
+        // Se estamos coletando mapeamentos, atualiza o mapeamento com o conteúdo
+        if (folder.isRemotePath && file && rootLocalPath) {
+          const relativePath = path.relative(rootLocalPath, localFilePath);
+          if (relativePath && !relativePath.startsWith("..")) {
+            // Encontra o mapeamento correspondente e adiciona hash
+            const mappingIndex = pathMappings.findIndex(m => m.localPath === relativePath);
+            if (mappingIndex !== -1) {
+              // Adiciona o conteúdo para gerar hash depois
+              (pathMappings[mappingIndex] as any).fileContent = fileContent;
+            }
+          }
+        }
       }
     }
     return;

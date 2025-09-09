@@ -211,6 +211,27 @@
         "icon": "$(timeline-refresh)",
         "category": "zmii",
         "enablement": "miisync.enabled"
+      },
+      {
+        "command": "miisync.refreshlocalprojects",
+        "title": "Refresh Local Projects",
+        "icon": "$(refresh)",
+        "category": "mii",
+        "enablement": "miisync.enabled"
+      },
+      {
+        "command": "miisync.uploadmodifiedfile",
+        "title": "Upload Modified File",
+        "icon": "$(arrow-up)",
+        "category": "mii",
+        "enablement": "miisync.enabled && miisync.loggedin"
+      },
+      {
+        "command": "miisync.showfilediff",
+        "title": "Show File Diff",
+        "icon": "$(diff)",
+        "category": "mii",
+        "enablement": "miisync.enabled"
       }
     ],
     "menus": {
@@ -304,27 +325,22 @@
           "group": "navigation"
         },
         {
-          "command": "miisync.downloadfileproperties",
-          "when": "view == fileproperties",
-          "group": "navigation@2"
-        },
-        {
-          "submenu": "miisync.resourceworkspace",
-          "when": "view == workbench.explorer.fileView",
-          "group": "navigation@0"
-        },
-        {
-          "command": "miisync.downloadbroad",
-          "when": "view == fileproperties",
-          "group": "navigation@1"
-        },
-        {
-          "command": "miisync.uploadbroad",
-          "when": "view == fileproperties",
-          "group": "navigation@0"
+          "command": "miisync.refreshlocalprojects",
+          "when": "view == localprojects",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
+        {
+          "command": "miisync.uploadmodifiedfile",
+          "when": "view == localprojects && viewItem == modifiedfile",
+          "group": "inline@0"
+        },
+        {
+          "command": "miisync.showfilediff",
+          "when": "view == localprojects && viewItem == modifiedfile",
+          "group": "inline@1"
+        },
         {
           "command": "miisync.downloadremotefolder",
           "when": "view == remotedirectory && viewItem == folder",
@@ -431,8 +447,8 @@
           "icon": "resources/cloud.svg"
         },
         {
-          "id": "fileproperties",
-          "name": "File Properties",
+          "id": "localprojects",
+          "name": "Local Projects",
           "when": "miisync.enabled",
           "icon": "resources/file.svg"
         }
