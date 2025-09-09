@@ -3,7 +3,7 @@ import * as path from 'path';
 import { Uri } from "vscode";
 import { System, UserConfig } from "../extension/system";
 import { saveFileService } from "../miiservice/savefileservice";
-import { GetRemotePath, PrepareUrisForService } from "../modules/file";
+import { GetRemotePathWithMapping, PrepareUrisForService } from "../modules/file";
 import { CheckSeverity, CheckSeverityFile, CheckSeverityFolder, SeverityOperation } from '../modules/severity';
 import { ActionReturn, ActionType, StartAction } from './action';
 import { Validate } from "./gate";
@@ -24,7 +24,7 @@ export async function UploadFile(uri: Uri, userConfig: UserConfig, system: Syste
         }
         if (!await CheckSeverityFile(uri, SeverityOperation.upload, userConfig, system)) return { aborted: true };
 
-        const sourcePath = GetRemotePath(uri.fsPath, userConfig);
+        const sourcePath = await GetRemotePathWithMapping(uri.fsPath, userConfig);
         const base64Content = encodeURIComponent(Buffer.from(content || " ").toString('base64'));
 
         const response = await saveFileService.call({ ...system, body: "Content=" + base64Content }, sourcePath);

@@ -1,0 +1,48 @@
+{
+  "rootRemotePath": "/WEB/projeto/modulos/vendas",
+  "rootLocalPath": "C:\\Workspace\\downloads\\vendas",
+  "mappings": [
+    {
+      "localPath": "controllers\\vendaController.js",
+      "remotePath": "/WEB/projeto/modulos/vendas/controllers/vendaController.js",
+      "lastUpdated": 1704067200000
+    },
+    {
+      "localPath": "models\\vendaModel.js",
+      "remotePath": "/WEB/projeto/modulos/vendas/models/vendaModel.js",
+      "lastUpdated": 1704067200000
+    },
+    {
+      "localPath": "views\\vendas\\index.html",
+      "remotePath": "/WEB/projeto/modulos/vendas/views/vendas/index.html",
+      "lastUpdated": 1704067200000
+    },
+    {
+      "localPath": "views\\vendas\\form.html",
+      "remotePath": "/WEB/projeto/modulos/vendas/views/vendas/form.html",
+      "lastUpdated": 1704067200000
+    },
+    {
+      "localPath": "config\\vendas.json",
+      "remotePath": "/WEB/projeto/modulos/vendas/config/vendas.json",
+      "lastUpdated": 1704067200000
+    },
+    {
+      "localPath": "tests",
+      "remotePath": "/WEB/projeto/modulos/vendas/tests",
+      "lastUpdated": 1704067200000
+    },
+    {
+      "localPath": "tests\\vendaController.test.js",
+      "remotePath": "/WEB/projeto/modulos/vendas/tests/vendaController.test.js",
+      "lastUpdated": 1704067200000
+    },
+    {
+      "localPath": "README.md",
+      "remotePath": "/WEB/projeto/modulos/vendas/README.md",
+      "lastUpdated": 1704067200000
+    }
+  ],
+  "version": "1.0.0",
+  "createdAt": 1704067200000
+}
