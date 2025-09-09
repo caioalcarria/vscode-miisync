@@ -18,6 +18,7 @@ import { OnCommandTransferBroad } from '../commands/commandtransferbroad';
 import { OnCommandTransferWorkspace } from '../commands/commandtransferworkspace';
 import { OnCommandUploadBroad } from '../commands/commanduploadbroad';
 import { OnCommandUploadWithPath } from '../commands/commanduploadwithpath';
+import { OnCommandCopyServerPath } from '../commands/commandcopyserverpath';
 import { OnCommandUploadWorkspace } from '../commands/commanduploadworkspace';
 import { OnDidChangeActiveTextEditor } from '../events/changeactivettexteditor';
 import { onDidChangeConfiguration } from '../events/changeconfiguration';
@@ -59,6 +60,7 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 	//Actions
 	RegisterCommand('miisync.uploadbroad', OnCommandUploadBroad, context);
 	RegisterCommand('miisync.uploadwithpath', OnCommandUploadWithPath, context);
+	RegisterCommand('miisync.copyserverpath', OnCommandCopyServerPath, context);
 	RegisterCommand('miisync.downloadbroad', OnCommandDownloadBroad, context);
 	RegisterCommand('miisync.transferbroad', OnCommandTransferBroad, context);
 	RegisterCommand('miisync.deletebroad', OnCommandDeleteBroad, context);
