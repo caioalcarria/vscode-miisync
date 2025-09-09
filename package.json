@@ -232,6 +232,20 @@
         "icon": "$(diff)",
         "category": "mii",
         "enablement": "miisync.enabled"
+      },
+      {
+        "command": "miisync.verifyserver",
+        "title": "Verify Server Integrity",
+        "icon": "$(cloud-download)",
+        "category": "mii",
+        "enablement": "miisync.enabled && miisync.loggedin"
+      },
+      {
+        "command": "miisync.showserverdifferences",
+        "title": "Show Server Differences",
+        "icon": "$(diff)",
+        "category": "mii",
+        "enablement": "miisync.enabled"
       }
     ],
     "menus": {
@@ -340,6 +354,11 @@
           "command": "miisync.showfilediff",
           "when": "view == localprojects && viewItem == modifiedfile",
           "group": "inline@1"
+        },
+        {
+          "command": "miisync.verifyserver",
+          "when": "view == localprojects && viewItem == localproject",
+          "group": "inline@0"
         },
         {
           "command": "miisync.downloadremotefolder",

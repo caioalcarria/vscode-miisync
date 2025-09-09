@@ -281,8 +281,8 @@ export async function DownloadComplexLimited(
       if (payload) {
         const fileContent = Buffer.from(payload.Value, "base64").toString('utf8');
         
-        // Salva o arquivo
-        outputFile(localFilePath, Buffer.from(payload.Value, "base64"), {
+        // Salva o arquivo como UTF-8 para manter consistência
+        outputFile(localFilePath, fileContent, {
           encoding: "utf8",
         }).catch((error) => logger.error(error));
 

@@ -23,6 +23,8 @@ import { OnCommandUploadWorkspace } from '../commands/commanduploadworkspace';
 import { OnCommandRefreshLocalProjects } from '../commands/commandrefreshlocalprojects';
 import { OnCommandUploadModifiedFile } from '../commands/commanduploadmodifiedfile';
 import { OnCommandShowFileDiff } from '../commands/commandshowfilediff';
+import { OnCommandVerifyServer } from '../commands/commandverifyserver';
+import { OnCommandShowServerDifferences } from '../commands/commandshowserverdifferences';
 import { OnDidChangeActiveTextEditor } from '../events/changeactivettexteditor';
 import { onDidChangeConfiguration } from '../events/changeconfiguration';
 import { OnDidOpenTextDocument } from '../events/opentextdocument';
@@ -77,6 +79,8 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 	RegisterCommand('miisync.refreshlocalprojects', OnCommandRefreshLocalProjects, context);
 	RegisterCommand('miisync.uploadmodifiedfile', OnCommandUploadModifiedFile, context);
 	RegisterCommand('miisync.showfilediff', OnCommandShowFileDiff, context);
+	RegisterCommand('miisync.verifyserver', OnCommandVerifyServer, context);
+	RegisterCommand('miisync.showserverdifferences', OnCommandShowServerDifferences, context);
 
 }
 
