@@ -248,6 +248,13 @@
         "enablement": "miisync.enabled"
       },
       {
+        "command": "miisync.searchinproject",
+        "title": "Search in MiiSync Project",
+        "icon": "$(search)",
+        "category": "mii",
+        "enablement": "miisync.enabled"
+      },
+      {
         "command": "miisync.verifyserver",
         "title": "Verify Server Integrity",
         "icon": "$(shield)",
@@ -313,6 +320,10 @@
           "when": "false"
         },
         {
+          "command": "miisync.searchinproject",
+          "when": "false"
+        },
+        {
           "command": "miisync.downloadremotefolderwithoptions",
           "when": "false"
         },
@@ -338,6 +349,11 @@
           "submenu": "miisync.resource",
           "when": "miisync.enabled",
           "group": "miisync"
+        },
+        {
+          "command": "miisync.searchinproject",
+          "when": "miisync.enabled && explorerResourceIsFolder",
+          "group": "navigation@1"
         }
       ],
       "editor/title/context": [
