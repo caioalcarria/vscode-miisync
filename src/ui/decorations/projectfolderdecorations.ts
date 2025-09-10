@@ -17,7 +17,7 @@ class ProjectFolderDecorationProvider implements vscode.FileDecorationProvider {
     provideFileDecoration(uri: vscode.Uri): vscode.ProviderResult<vscode.FileDecoration> {
         if (this.isMiiSyncProject(uri.fsPath)) {
             return {
-                badge: '🔄',
+                badge: '●',
                 tooltip: 'Projeto MiiSync Sincronizado',
                 color: new vscode.ThemeColor('charts.blue')
             };
