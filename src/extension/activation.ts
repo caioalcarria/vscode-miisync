@@ -4,7 +4,7 @@ import { OnCommandCreateConfig } from '../commands/commandconfig';
 import { OnCommandDeleteBroad } from '../commands/commanddeletebroad';
 import { OnCommandDeleteWorkspace } from '../commands/commanddeleteworkspace';
 import { OnCommandDownloadBroad } from '../commands/commanddownloadbroad';
-import { OnCommandDownloadRemoteDirectory, OnCommandDownloadRemoteFile, OnCommandDownloadRemoteFolder, OnCommandDownloadRemoteFolderAsProject } from '../commands/commanddownloaddirectory';
+import { OnCommandDownloadRemoteDirectory, OnCommandDownloadRemoteFile, OnCommandDownloadRemoteFolder, OnCommandDownloadRemoteFolderAsProject, OnCommandVerifyRemoteFolderIntegrityWrapper, OnCommandDownloadRemoteFolderWithOptionsWrapper } from '../commands/commanddownloaddirectory';
 import { OnCommandDownloadFileProperties } from '../commands/commanddownloadfile';
 import { OnCommandDownloadProject } from '../commands/commanddownloadproject';
 import { OnCommandDownloadTransactionProperties } from '../commands/commanddownloadtransaction';
@@ -29,6 +29,7 @@ import { OnDidChangeActiveTextEditor } from '../events/changeactivettexteditor';
 import { onDidChangeConfiguration } from '../events/changeconfiguration';
 import { OnDidOpenTextDocument } from '../events/opentextdocument';
 import { OnDidSaveTextDocument } from '../events/savetextdocument';
+import { remoteDirectoryDecorationProvider } from '../ui/decorations/remotedirectorydecorations';
 import { remoteDirectoryTree } from '../ui/treeview/remotedirectorytree';
 import { localProjectsTree } from '../ui/treeview/localprojectstree';
 import transactionPropertiesVirtualDoc from '../ui/virtualdocument/transactionproperties';
@@ -56,6 +57,8 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 	RegisterCommand('miisync.downloadproject', OnCommandDownloadProject, context);
 	RegisterCommand('miisync.downloadremotefolder', OnCommandDownloadRemoteFolder, context);
 	RegisterCommand('miisync.downloadremotefolderasproject', OnCommandDownloadRemoteFolderAsProject, context);
+	RegisterCommand('miisync.verifyremotefolderintegrity', OnCommandVerifyRemoteFolderIntegrityWrapper, context);
+	RegisterCommand('miisync.downloadremotefolderwithoptions', OnCommandDownloadRemoteFolderWithOptionsWrapper, context);
 	RegisterCommand('miisync.downloadremotefile', OnCommandDownloadRemoteFile, context);
 	RegisterCommand('miisync.downloadremotedirectory', OnCommandDownloadRemoteDirectory, context);
 	RegisterCommand('miisync.downloadfileproperties', OnCommandDownloadFileProperties, context);
@@ -90,6 +93,7 @@ export function activateTree({ subscriptions }: vscode.ExtensionContext) {
 	subscriptions.push(vscode.window.registerTreeDataProvider('localprojects', localProjectsTree));
 	subscriptions.push(vscode.window.registerTreeDataProvider('remotedirectory', remoteDirectoryTree));
 	subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('transactionproperties', transactionPropertiesVirtualDoc));
+	subscriptions.push(vscode.window.registerFileDecorationProvider(remoteDirectoryDecorationProvider));
 }
 
 

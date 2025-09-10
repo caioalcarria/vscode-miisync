@@ -192,6 +192,20 @@
         "enablement": "miisync.enabled  && miisync.loggedin"
       },
       {
+        "command": "miisync.verifyremotefolderintegrity",
+        "title": "Verify Server Integrity",
+        "icon": "$(shield)",
+        "category": "zmii",
+        "enablement": "miisync.enabled  && miisync.loggedin"
+      },
+      {
+        "command": "miisync.downloadremotefolderwithoptions",
+        "title": "Download with Options",
+        "icon": "$(gear)",
+        "category": "zmii",
+        "enablement": "miisync.enabled  && miisync.loggedin"
+      },
+      {
         "command": "miisync.downloadremotefile",
         "title": "Download Remote File",
         "icon": "$(arrow-down)",
@@ -236,7 +250,7 @@
       {
         "command": "miisync.verifyserver",
         "title": "Verify Server Integrity",
-        "icon": "$(cloud-download)",
+        "icon": "$(shield)",
         "category": "mii",
         "enablement": "miisync.enabled && miisync.loggedin"
       },
@@ -292,6 +306,14 @@
         },
         {
           "command": "miisync.downloadremotefolderasproject",
+          "when": "false"
+        },
+        {
+          "command": "miisync.verifyremotefolderintegrity",
+          "when": "false"
+        },
+        {
+          "command": "miisync.downloadremotefolderwithoptions",
           "when": "false"
         },
         {
@@ -366,13 +388,23 @@
           "group": "inline@0"
         },
         {
+          "command": "miisync.verifyremotefolderintegrity",
+          "when": "view == remotedirectory && viewItem == folder-loaded",
+          "group": "inline@0"
+        },
+        {
+          "command": "miisync.downloadremotefolderwithoptions",
+          "when": "view == remotedirectory && viewItem == folder-loaded",
+          "group": "inline@1"
+        },
+        {
           "command": "miisync.openscreen",
           "when": "view == remotedirectory && viewItem =~ /index.*html/ ",
           "group": "inline@0"
         },
         {
           "command": "miisync.downloadremotefile",
-          "when": "view == remotedirectory && viewItem != folder",
+          "when": "view == remotedirectory && viewItem != folder && viewItem != file-loaded",
           "group": "inline@1"
         }
       ],
@@ -467,7 +499,7 @@
         },
         {
           "id": "localprojects",
-          "name": "Local Projects",
+          "name": "Local Changes",
           "when": "miisync.enabled",
           "icon": "resources/file.svg"
         }

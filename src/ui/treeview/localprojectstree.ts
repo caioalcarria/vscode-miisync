@@ -288,6 +288,13 @@ export class LocalProjectsTreeProvider implements vscode.TreeDataProvider<LocalP
     }
 
     /**
+     * Retorna os projetos carregados atualmente
+     */
+    public getProjects(): LocalProject[] {
+        return [...this.projects]; // Retorna uma cópia para evitar modificações externas
+    }
+
+    /**
      * 🚀 SISTEMA DE AUTO-REFRESH INTELIGENTE
      */
     private setupAutoRefresh(): void {

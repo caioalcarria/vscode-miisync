@@ -224,6 +224,12 @@ export async function DownloadRemoteFolderAsProject(remoteFolderPath: string, us
         if (!await CheckSeverity(folder, SeverityOperation.download, userConfig, system)) return { aborted: true };
         const response = await DownloadComplexLimited(folder, getPath, userConfig, system);
         
+        // 🔄 ATUALIZAÇÃO: Dispara evento de projeto baixado para atualizar as árvores
+        if (!response.aborted) {
+            const { projectEvents } = await import('../events/projectevents');
+            projectEvents.fireProjectDownloaded(projectLocalPath, remoteFolderPath);
+        }
+        
         return { aborted: response.aborted };
     };
     

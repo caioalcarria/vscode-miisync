@@ -1,9 +1,66 @@
 import * as vscode from "vscode";
 import { File, Folder } from "../../miiservice/abstract/responsetypes";
 import { TreeDataProvider, TreeItem } from "./tree";
+import { localProjectsTree } from "./localprojectstree";
+import { remoteDirectoryDecorationProvider } from "../decorations/remotedirectorydecorations";
 
 class RemoteDirectoryTree extends TreeDataProvider {
     private directory: (File | Folder)[];
+    private refreshTimeout: NodeJS.Timeout | null = null;
+
+    constructor() {
+        super();
+        // Escuta mudanças nos projetos locais para atualizar decorações
+        this.setupProjectChangeListener();
+    }
+
+    /**
+     * Força atualização imediata (uso público)
+     */
+    public forceRefresh(): void {
+        console.log('🔄 Force refresh do remote directory tree');
+        this.refreshDecorationsAndTree();
+    }
+
+    /**
+     * Configura listener para mudanças nos projetos locais
+     */
+    private setupProjectChangeListener(): void {
+        // Escuta mudanças nos projetos locais
+        localProjectsTree.onDidChangeTreeData(() => {
+            console.log('🔄 Projetos locais alterados - atualizando remote directory tree');
+            this.refreshWithDelay();
+        });
+        
+        // Escuta eventos específicos de projeto usando VS Code EventEmitter
+        const { projectEvents } = require('../../events/projectevents');
+        projectEvents.onProjectDownloaded(() => {
+            console.log('📥 Projeto baixado - atualizando remote directory tree');
+            this.refreshWithDelay();
+        });
+    }
+    
+    /**
+     * Refresh com delay para evitar múltiplas atualizações
+     */
+    private refreshWithDelay(delayMs: number = 500): void {
+        if (this.refreshTimeout) {
+            clearTimeout(this.refreshTimeout);
+        }
+        
+        this.refreshTimeout = setTimeout(() => {
+            this.refreshDecorationsAndTree();
+            this.refreshTimeout = null;
+        }, delayMs);
+    }
+    
+    /**
+     * Atualiza decorações e tree
+     */
+    private refreshDecorationsAndTree(): void {
+        remoteDirectoryDecorationProvider.refresh();
+        this.refresh();
+    }
 
     generateItems(directory: (File | Folder)[]) {
         const items: TreeItem[] = this.generate(directory, []);
@@ -20,7 +77,24 @@ class RemoteDirectoryTree extends TreeDataProvider {
             const item = new TreeItem(file.ObjectName);
             item.iconPath = vscode.ThemeIcon.File;
             item.data = { filePath: file.FilePath, name: file.ObjectName };
-            item.contextValue = file.ObjectName;
+            
+            // Verifica se este arquivo está em uma pasta já carregada localmente
+            const localProjects = localProjectsTree.getProjects();
+            const isFileInLoadedProject = localProjects.some(project => 
+                file.FilePath.startsWith(project.remotePath) || 
+                file.FilePath.startsWith(project.remotePath + '/') ||
+                (project.remotePath + '/').startsWith(file.FilePath)
+            );
+            
+            if (isFileInLoadedProject) {
+                // Arquivo está em projeto carregado - não mostra botão de download
+                item.contextValue = 'file-loaded';
+                item.description = '✓ In loaded project';
+            } else {
+                // Arquivo não está em projeto carregado - mostra botão de download
+                item.contextValue = file.ObjectName;
+            }
+            
             folder.children.push(item);
         }
 
@@ -36,6 +110,23 @@ class RemoteDirectoryTree extends TreeDataProvider {
             folder.iconPath = vscode.ThemeIcon.Folder;
             folder.data = folderPath;
             folder.contextValue = 'folder';
+            
+            // Verifica se esta pasta já está carregada localmente
+            const localProjects = localProjectsTree.getProjects();
+            const matchingProjects = localProjects.filter(project => 
+                project.remotePath === folderPath || 
+                project.remotePath === folderPath + '/' ||
+                project.remotePath + '/' === folderPath
+            );
+            
+            if (matchingProjects.length > 0) {
+                // Pasta já está carregada localmente
+                folder.contextValue = 'folder-loaded';
+                folder.iconPath = new vscode.ThemeIcon('check', new vscode.ThemeColor('charts.green'));
+                folder.resourceUri = vscode.Uri.parse(`miisync-loaded:///${folderName}`);
+                folder.description = `✓ Loaded (${matchingProjects.length} project${matchingProjects.length > 1 ? 's' : ''})`;
+            }
+            
             folders.push(folder);
 
             const originalFolder = folder;
