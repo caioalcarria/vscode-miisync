@@ -14,6 +14,12 @@ export interface PathMapping {
   lastUpdated: number;
   /** Hash SHA-256 do conteúdo do arquivo para detectar modificações */
   contentHash?: string;
+  /** Data de modificação do arquivo no servidor quando foi baixado */
+  serverModified?: string;
+  /** Data de modificação local do arquivo quando foi baixado/salvo */
+  localModifiedAtDownload?: string;
+  /** Indica se é um arquivo binário */
+  isBinary?: boolean;
 }
 
 /**
@@ -290,6 +296,14 @@ export class PathMappingManager {
     }
 
     const configFilePath = this.getConfigFilePath(rootLocalPath);
+    await writeFile(configFilePath, JSON.stringify(config, null, 2), "utf8");
+  }
+
+  /**
+   * Salva o arquivo de mapeamento atualizado
+   */
+  static async saveUpdatedMapping(config: PathMappingConfig): Promise<void> {
+    const configFilePath = this.getConfigFilePath(config.rootLocalPath);
     await writeFile(configFilePath, JSON.stringify(config, null, 2), "utf8");
   }
 }

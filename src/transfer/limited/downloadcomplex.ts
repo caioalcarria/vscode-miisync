@@ -98,7 +98,10 @@ export async function DownloadComplexLimited(
               localPath: m.localPath,
               remotePath: m.remotePath,
               lastUpdated: Date.now(),
-              contentHash
+              contentHash,
+              serverModified: m.serverModified, // Data do servidor
+              localModifiedAtDownload: m.localModifiedAtDownload, // Data local no download
+              isBinary: m.isBinary // Se é binário
             };
           })
         );
@@ -279,22 +282,49 @@ export async function DownloadComplexLimited(
         (row) => row.Name == "Payload"
       );
       if (payload) {
-        const fileContent = Buffer.from(payload.Value, "base64").toString('utf8');
+        // Detecta se é arquivo binário baseado na extensão
+        const extension = path.extname(localFilePath).toLowerCase();
+        const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', 
+                                 '.woff', '.woff2', '.ttf', '.otf', '.eot',
+                                 '.pdf', '.zip', '.rar', '.7z', '.exe', '.dll',
+                                 '.mp3', '.mp4', '.avi', '.mov', '.wav'];
         
-        // Salva o arquivo como UTF-8 para manter consistência
-        outputFile(localFilePath, fileContent, {
-          encoding: "utf8",
-        }).catch((error) => logger.error(error));
+        const isBinary = binaryExtensions.includes(extension);
+        
+        if (isBinary) {
+          // Para arquivos binários, salva como Buffer
+          const binaryContent = Buffer.from(payload.Value, "base64");
+          await outputFile(localFilePath, binaryContent);
+        } else {
+          // Para arquivos de texto, converte para UTF-8
+          const fileContent = Buffer.from(payload.Value, "base64").toString('utf8');
+          await outputFile(localFilePath, fileContent, {
+            encoding: "utf8",
+          });
+        }
 
-        // Se estamos coletando mapeamentos, atualiza o mapeamento com o conteúdo
+        // Se estamos coletando mapeamentos, salva metadata do servidor E local
         if (folder.isRemotePath && file && rootLocalPath) {
           const relativePath = path.relative(rootLocalPath, localFilePath);
           if (relativePath && !relativePath.startsWith("..")) {
-            // Encontra o mapeamento correspondente e adiciona hash
             const mappingIndex = pathMappings.findIndex(m => m.localPath === relativePath);
             if (mappingIndex !== -1) {
-              // Adiciona o conteúdo para gerar hash depois
-              (pathMappings[mappingIndex] as any).fileContent = fileContent;
+              // Salva metadata do servidor
+              const serverModified = file.Modified ? new Date(file.Modified) : new Date();
+              
+              // Obtém a data de modificação local do arquivo recém criado
+              const stats = await import('fs-extra').then(fs => fs.stat(localFilePath));
+              const localModifiedAtDownload = stats.mtime;
+              
+              (pathMappings[mappingIndex] as any).serverModified = serverModified.toISOString();
+              (pathMappings[mappingIndex] as any).localModifiedAtDownload = localModifiedAtDownload.toISOString();
+              (pathMappings[mappingIndex] as any).isBinary = isBinary;
+              
+              if (!isBinary) {
+                // Para arquivos de texto, salva o conteúdo para hash
+                const fileContent = Buffer.from(payload.Value, "base64").toString('utf8');
+                (pathMappings[mappingIndex] as any).fileContent = fileContent;
+              }
             }
           }
         }
