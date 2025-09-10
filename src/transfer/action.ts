@@ -1,6 +1,7 @@
 import { System } from "../extension/system";
 import logger from "../ui/logger";
 import statusBar, { Icon } from "../ui/statusbar";
+import { localProjectsTree } from "../ui/treeview/localprojectstree";
 
 export enum ActionType { 'upload', 'download', 'delete', 'transfer' };
 export interface ActionReturn { aborted: boolean, error?: boolean, message?: string };
@@ -50,6 +51,18 @@ export async function StartAction(type: ActionType, { name, resource, system }: 
         else {
             statusBar.updateBar(texts.end, Icon.success, { duration: 2 });
             logger.infoplus(system.name, name, GetStateMessage("Completed", resource));
+            
+            // 🚀 NOVO: Sistema inteligente de refresh após downloads
+            if (type === ActionType.download) {
+                console.log('📁 Download concluído - forçando refresh da lista de projetos...');
+                
+                // Força refresh imediato E agenda outro em 2 segundos (para garantir)
+                localProjectsTree.refresh();
+                setTimeout(() => {
+                    console.log('🔄 Refresh de segurança após download');
+                    localProjectsTree.refresh();
+                }, 2000);
+            }
         }
     } catch (error: any) {
         statusBar.updateBar("Error", Icon.error, { duration: 3 });

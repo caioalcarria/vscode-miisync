@@ -122,6 +122,18 @@ export async function DownloadComplexLimited(
 
     limitManager.endProgress();
 
+    // 🚀 NOVO: Dispara evento de projeto baixado + refresh automático
+    if (folder.isRemotePath && rootLocalPath && rootRemotePath) {
+        console.log('📁 Download de projeto remoto concluído - disparando eventos...');
+        
+        // Importa dinamicamente para evitar dependência circular
+        const { projectEvents } = await import('../../events/projectevents');
+        projectEvents.fireProjectDownloaded(rootLocalPath, rootRemotePath);
+        
+        const { localProjectsTree } = await import('../../ui/treeview/localprojectstree');
+        localProjectsTree.refresh();
+    }
+
     return { aborted };
   } catch (error: any) {
     limitManager.endProgress();

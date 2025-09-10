@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
 import { PathMappingManager } from '../../modules/pathmapping';
+import { projectEvents } from '../../events/projectevents';
 
 /**
  * Status de modificação do arquivo
@@ -278,23 +279,169 @@ export class LocalProjectsTreeProvider implements vscode.TreeDataProvider<LocalP
     readonly onDidChangeTreeData: vscode.Event<LocalProjectTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     private projects: LocalProject[] = [];
+    private fileWatchers: vscode.FileSystemWatcher[] = [];
+    private refreshTimeout: NodeJS.Timeout | null = null;
 
     constructor() {
         this.refresh();
-        
-        // Atualiza a árvore quando arquivos são salvos
-        vscode.workspace.onDidSaveTextDocument(() => {
+        this.setupAutoRefresh();
+    }
+
+    /**
+     * 🚀 SISTEMA DE AUTO-REFRESH INTELIGENTE
+     */
+    private setupAutoRefresh(): void {
+        console.log('🔄 Configurando sistema de auto-refresh inteligente...');
+
+        // 1. Monitor de arquivos salvos (modificações)
+        vscode.workspace.onDidSaveTextDocument((document) => {
+            console.log(`💾 Arquivo salvo: ${document.fileName}`);
+            
+            // Dispara evento específico se é em um projeto MiiSync
+            this.checkIfFileIsInProject(document.fileName);
+            
+            this.scheduleRefresh('arquivo salvo');
+        });
+
+        // 2. Monitor de arquivos criados
+        vscode.workspace.onDidCreateFiles((event) => {
+            console.log(`📁 Arquivos criados: ${event.files.length}`);
+            this.scheduleRefresh('arquivos criados');
+        });
+
+        // 3. Monitor de arquivos deletados
+        vscode.workspace.onDidDeleteFiles((event) => {
+            console.log(`🗑️ Arquivos deletados: ${event.files.length}`);
+            this.scheduleRefresh('arquivos deletados');
+        });
+
+        // 4. Monitor de mudanças de workspace
+        vscode.workspace.onDidChangeWorkspaceFolders(() => {
+            console.log('📂 Workspace folders mudaram');
+            this.scheduleRefresh('workspace mudou');
+        });
+
+        // 5. Monitor específico para arquivos .miisync (path-mapping.json)
+        this.setupMiiSyncWatchers();
+
+        // 6. Auto-refresh periódico (a cada 30 segundos)
+        setInterval(() => {
+            console.log('⏰ Auto-refresh periódico');
+            this.scheduleRefresh('auto-refresh periódico');
+        }, 30000);
+
+        // 7. Monitor quando VS Code ganha foco (pode ter mudanças externas)
+        vscode.window.onDidChangeWindowState((state) => {
+            if (state.focused) {
+                console.log('👁️ VS Code ganhou foco - verificando mudanças');
+                this.scheduleRefresh('foco ganho');
+            }
+        });
+
+        // 8. 🚀 NOVO: Monitor de eventos específicos de projetos
+        projectEvents.onProjectDownloaded((event) => {
+            console.log(`🎉 Projeto baixado detectado: ${event.localPath}`);
+            this.scheduleRefresh('projeto baixado');
+        });
+
+        projectEvents.onProjectModified((event) => {
+            console.log(`📝 Projeto modificado detectado: ${event.localPath}`);
+            this.scheduleRefresh('projeto modificado');
+        });
+
+        projectEvents.onProjectDeleted((event) => {
+            console.log(`🗑️ Projeto deletado detectado: ${event.localPath}`);
+            this.scheduleRefresh('projeto deletado');
+        });
+    }
+
+    /**
+     * Configura watchers específicos para arquivos .miisync
+     */
+    private setupMiiSyncWatchers(): void {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders) return;
+
+        // Remove watchers antigos
+        this.fileWatchers.forEach(watcher => watcher.dispose());
+        this.fileWatchers = [];
+
+        for (const folder of workspaceFolders) {
+            // Watcher para path-mapping.json
+            const mappingPattern = new vscode.RelativePattern(folder, '**/.miisync/path-mapping.json');
+            const mappingWatcher = vscode.workspace.createFileSystemWatcher(mappingPattern);
+            
+            mappingWatcher.onDidCreate(() => {
+                console.log('📋 path-mapping.json criado');
+                this.scheduleRefresh('mapping criado');
+            });
+            
+            mappingWatcher.onDidChange(() => {
+                console.log('📋 path-mapping.json modificado');
+                this.scheduleRefresh('mapping modificado');
+            });
+            
+            mappingWatcher.onDidDelete(() => {
+                console.log('📋 path-mapping.json deletado');
+                this.scheduleRefresh('mapping deletado');
+            });
+
+            this.fileWatchers.push(mappingWatcher);
+
+            // Watcher para novos diretórios .miisync
+            const miisyncPattern = new vscode.RelativePattern(folder, '**/.miisync');
+            const miisyncWatcher = vscode.workspace.createFileSystemWatcher(miisyncPattern);
+            
+            miisyncWatcher.onDidCreate(() => {
+                console.log('📁 Novo diretório .miisync criado - novo projeto!');
+                this.scheduleRefresh('novo projeto detectado');
+            });
+
+            this.fileWatchers.push(miisyncWatcher);
+        }
+    }
+
+    /**
+     * Verifica se um arquivo pertence a um projeto MiiSync e dispara evento
+     */
+    private async checkIfFileIsInProject(filePath: string): Promise<void> {
+        try {
+            // Procura o diretório .miisync mais próximo
+            let currentDir = path.dirname(filePath);
+            let projectRoot: string | null = null;
+            
+            while (currentDir && currentDir !== path.parse(currentDir).root) {
+                const miisyncPath = path.join(currentDir, '.miisync');
+                if (await fs.pathExists(miisyncPath)) {
+                    projectRoot = currentDir;
+                    break;
+                }
+                currentDir = path.dirname(currentDir);
+            }
+            
+            if (projectRoot) {
+                const fileName = path.basename(filePath);
+                console.log(`📝 Arquivo em projeto MiiSync: ${fileName} (projeto: ${projectRoot})`);
+                projectEvents.fireProjectModified(projectRoot, fileName);
+            }
+        } catch (error) {
+            console.error('❌ Erro ao verificar se arquivo está em projeto:', error);
+        }
+    }
+
+    /**
+     * Agenda um refresh com debounce para evitar muitos refreshes seguidos
+     */
+    private scheduleRefresh(reason: string): void {
+        if (this.refreshTimeout) {
+            clearTimeout(this.refreshTimeout);
+        }
+
+        this.refreshTimeout = setTimeout(() => {
+            console.log(`🔄 Executando refresh: ${reason}`);
             this.refresh();
-        });
-
-        // Atualiza quando arquivos são criados/deletados
-        vscode.workspace.onDidCreateFiles(() => {
-            setTimeout(() => this.refresh(), 1000);
-        });
-
-        vscode.workspace.onDidDeleteFiles(() => {
-            setTimeout(() => this.refresh(), 1000);
-        });
+            this.refreshTimeout = null;
+        }, 500); // 500ms de debounce
     }
 
     refresh(): void {
@@ -486,11 +633,67 @@ export class LocalProjectsTreeProvider implements vscode.TreeDataProvider<LocalP
                 
                 if (await fs.pathExists(fullPath)) {
                     // Arquivo existe - verifica se foi modificado
-                    const currentHash = await this.calculateFileHash(fullPath);
-                    const originalHash = mapping.contentHash;
-
-                    if (!originalHash || currentHash !== originalHash) {
-                        const stats = await fs.stat(fullPath);
+                    const stats = await fs.stat(fullPath);
+                    let wasModified = false;
+                    let modificationReason = '';
+                    
+                    // ESTRATÉGIA DUPLA: Verifica TANTO data quanto hash para máxima precisão
+                    
+                    // 1. Verifica data de modificação vs data salva no download
+                    let dateChanged = false;
+                    if (mapping.localModifiedAtDownload) {
+                        const downloadDate = new Date(mapping.localModifiedAtDownload);
+                        const currentDate = stats.mtime;
+                        const timeDiff = Math.abs(currentDate.getTime() - downloadDate.getTime());
+                        
+                        if (timeDiff > 1000) {
+                            dateChanged = true;
+                            modificationReason += `data (diff: ${timeDiff}ms) `;
+                        }
+                    }
+                    
+                    // 2. Verifica hash do conteúdo (sempre que possível)
+                    let hashChanged = false;
+                    if (mapping.contentHash) {
+                        const currentHash = await this.calculateFileHash(fullPath);
+                        if (currentHash !== mapping.contentHash) {
+                            hashChanged = true;
+                            modificationReason += `conteúdo `;
+                        }
+                    }
+                    
+                    // 3. Decisão final: arquivo só é considerado modificado se:
+                    // - Data mudou E hash mudou (arquivo realmente alterado)
+                    // - Ou só hash mudou (se não tem data salva)
+                    // - Ou só data mudou (se não tem hash salvo)
+                    if (mapping.contentHash && mapping.localModifiedAtDownload) {
+                        // Tem ambos: só considera modificado se HASH mudou
+                        wasModified = hashChanged;
+                        if (hashChanged) {
+                            console.log(`📝 Arquivo modificado (conteúdo): ${mapping.localPath}`);
+                        } else if (dateChanged) {
+                            console.log(`⏰ Data mudou mas conteúdo igual: ${mapping.localPath} - IGNORANDO`);
+                        }
+                    } else if (mapping.contentHash) {
+                        // Só tem hash: verifica hash
+                        wasModified = hashChanged;
+                        if (hashChanged) {
+                            console.log(`📝 Arquivo modificado por hash: ${mapping.localPath}`);
+                        }
+                    } else if (mapping.localModifiedAtDownload) {
+                        // Só tem data: verifica data
+                        wasModified = dateChanged;
+                        if (dateChanged) {
+                            console.log(`📝 Arquivo modificado por data: ${mapping.localPath}`);
+                        }
+                    } else {
+                        // Não tem metadata: considera não modificado (evita falsos positivos)
+                        wasModified = false;
+                        console.log(`⚠️ Sem metadata para comparar: ${mapping.localPath} - ASSUMINDO NÃO MODIFICADO`);
+                    }
+                    
+                    // Só adiciona se realmente foi modificado
+                    if (wasModified) {
                         modifiedFiles.push({
                             fileName: path.basename(fullPath),
                             filePath: fullPath,
@@ -498,7 +701,7 @@ export class LocalProjectsTreeProvider implements vscode.TreeDataProvider<LocalP
                             lastModified: stats.mtime,
                             hasLocalChanges: true,
                             status: FileStatus.Modified,
-                            originalHash: originalHash
+                            originalHash: mapping.contentHash
                         });
                     }
                 } else {
@@ -526,12 +729,29 @@ export class LocalProjectsTreeProvider implements vscode.TreeDataProvider<LocalP
     }
 
     /**
-     * Calcula hash SHA-256 do conteúdo do arquivo
+     * Calcula hash SHA-256 do conteúdo do arquivo (considerando se é binário)
      */
     private async calculateFileHash(filePath: string): Promise<string> {
         try {
-            const content = await fs.readFile(filePath);
-            return crypto.createHash('sha256').update(content).digest('hex');
+            // Detecta se é arquivo binário baseado na extensão
+            const extension = path.extname(filePath).toLowerCase();
+            const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', 
+                                     '.woff', '.woff2', '.ttf', '.otf', '.eot',
+                                     '.pdf', '.zip', '.rar', '.7z', '.exe', '.dll',
+                                     '.mp3', '.mp4', '.avi', '.mov', '.wav'];
+            
+            const isBinary = binaryExtensions.includes(extension);
+            
+            if (isBinary) {
+                // Para arquivos binários, usa estatísticas do arquivo (size + mtime) como "hash"
+                const stats = await fs.stat(filePath);
+                const hashInput = `${stats.size}-${stats.mtime.getTime()}`;
+                return crypto.createHash('sha256').update(hashInput).digest('hex');
+            } else {
+                // Para arquivos de texto, usa o conteúdo real
+                const content = await fs.readFile(filePath, 'utf8');
+                return crypto.createHash('sha256').update(content).digest('hex');
+            }
         } catch (error) {
             console.error('❌ Erro ao calcular hash do arquivo:', error);
             return '';
@@ -596,6 +816,28 @@ export class LocalProjectsTreeProvider implements vscode.TreeDataProvider<LocalP
         }
 
         return files;
+    }
+
+    /**
+     * Limpa recursos quando a extensão é desativada
+     */
+    dispose(): void {
+        console.log('🧹 Limpando watchers do LocalProjectsTree...');
+        
+        // Limpa timeout de refresh
+        if (this.refreshTimeout) {
+            clearTimeout(this.refreshTimeout);
+            this.refreshTimeout = null;
+        }
+
+        // Limpa file watchers
+        this.fileWatchers.forEach(watcher => {
+            watcher.dispose();
+        });
+        this.fileWatchers = [];
+
+        // Limpa event emitter
+        this._onDidChangeTreeData.dispose();
     }
 }
 

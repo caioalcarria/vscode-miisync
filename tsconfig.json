@@ -1,24 +1,18 @@
 {
-	"compilerOptions": {
-		"module": "CommonJS",
-		"target": "ES2022",
-		"outDir": "out",
-		"lib": [
-			"ES2022"
-		],
-		"sourceMap": true,
-		"rootDir": "src",
-		"strict": true,
-		"strictNullChecks": false,		
-		"strictPropertyInitialization": false,
-		"noImplicitAny": false,
-		// "noImplicitReturns": true, /* Report error when not all code paths in function return a value. */
-		// "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */
-		"noUnusedParameters": false,  /* Report errors on unused parameters. */		
-	},
-    "exclude": [
-        "node_modules",
-        ".vscode-test",
-        "test"
-    ]
+  "compilerOptions": {
+    "module": "CommonJS",
+    "target": "ES2022",
+    "outDir": "out",
+    "lib": ["ES2022"],
+    "sourceMap": true,
+    "rootDir": "src",
+    "strict": true,
+    "strictNullChecks": false,
+    "strictPropertyInitialization": false,
+    "noImplicitAny": false,
+    // "noImplicitReturns": true, /* Report error when not all code paths in function return a value. */
+    // "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */
+    "noUnusedParameters": false /* Report errors on unused parameters. */
+  },
+  "exclude": ["node_modules", ".vscode-test", "test"]
 }
