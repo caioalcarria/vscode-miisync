@@ -32,6 +32,7 @@ import { OnDidOpenTextDocument } from '../events/opentextdocument';
 import { OnDidSaveTextDocument } from '../events/savetextdocument';
 import { remoteDirectoryDecorationProvider } from '../ui/decorations/remotedirectorydecorations';
 import { projectFolderDecorationProvider } from '../ui/decorations/projectfolderdecorations';
+import { fileStatusDecorationProvider } from '../ui/decorations/filestatusdecorations';
 import { remoteDirectoryTree } from '../ui/treeview/remotedirectorytree';
 import { localProjectsTree } from '../ui/treeview/localprojectstree';
 import transactionPropertiesVirtualDoc from '../ui/virtualdocument/transactionproperties';
@@ -98,6 +99,7 @@ export function activateTree({ subscriptions }: vscode.ExtensionContext) {
 	subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('transactionproperties', transactionPropertiesVirtualDoc));
 	subscriptions.push(vscode.window.registerFileDecorationProvider(remoteDirectoryDecorationProvider));
 	subscriptions.push(vscode.window.registerFileDecorationProvider(projectFolderDecorationProvider));
+	subscriptions.push(vscode.window.registerFileDecorationProvider(fileStatusDecorationProvider));
 }
 
 
