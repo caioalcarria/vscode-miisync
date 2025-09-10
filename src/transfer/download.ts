@@ -189,3 +189,43 @@ export async function DownloadContextDirectory(userConfig: UserConfig, system: S
     }
     StartAction(ActionType.download, { name: "Download Context Directory", system }, { isSimple: false }, download);
 }
+
+/**
+ * 🚀 NOVA FUNÇÃO: Baixa pasta remota diretamente como projeto (sem perguntar onde)
+ */
+export async function DownloadRemoteFolderAsProject(remoteFolderPath: string, userConfig: UserConfig, system: System) {
+    if (!await Validate(userConfig, { system })) {
+        return false;
+    }
+
+    const folderName = path.basename(remoteFolderPath);
+    console.log(`📁 Baixando como projeto: ${folderName} (${remoteFolderPath})`);
+    
+    const download = async (): Promise<ActionReturn> => {
+        const workspaceFolder = GetCurrentWorkspaceFolder().fsPath;
+        
+        // 🎯 DIRETO: Usa o nome da pasta como nome do projeto local
+        const projectLocalPath = workspaceFolder + path.sep + folderName;
+
+        function getPath(item: File | Folder) {
+            if ('FolderName' in item) {
+                return projectLocalPath + path.sep +
+                    (path.relative(remoteFolderPath, item.Path) != '' ? path.relative(remoteFolderPath, item.Path) : '');
+            }
+            else {
+                return projectLocalPath + path.sep +
+                    (path.relative(remoteFolderPath, item.FilePath) != '' ? path.relative(remoteFolderPath, item.FilePath) + path.sep : '') +
+                    item.ObjectName;
+            }
+        }
+        
+        console.log(`📂 Baixando para: ${projectLocalPath}`);
+        const folder = { files: [], folders: [], path: remoteFolderPath, isRemotePath: true };
+        if (!await CheckSeverity(folder, SeverityOperation.download, userConfig, system)) return { aborted: true };
+        const response = await DownloadComplexLimited(folder, getPath, userConfig, system);
+        
+        return { aborted: response.aborted };
+    };
+    
+    StartAction(ActionType.download, { name: "Download Project", resource: folderName, system }, { isSimple: false }, download);
+}

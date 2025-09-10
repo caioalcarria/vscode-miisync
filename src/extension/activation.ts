@@ -4,7 +4,7 @@ import { OnCommandCreateConfig } from '../commands/commandconfig';
 import { OnCommandDeleteBroad } from '../commands/commanddeletebroad';
 import { OnCommandDeleteWorkspace } from '../commands/commanddeleteworkspace';
 import { OnCommandDownloadBroad } from '../commands/commanddownloadbroad';
-import { OnCommandDownloadRemoteDirectory, OnCommandDownloadRemoteFile, OnCommandDownloadRemoteFolder } from '../commands/commanddownloaddirectory';
+import { OnCommandDownloadRemoteDirectory, OnCommandDownloadRemoteFile, OnCommandDownloadRemoteFolder, OnCommandDownloadRemoteFolderAsProject } from '../commands/commanddownloaddirectory';
 import { OnCommandDownloadFileProperties } from '../commands/commanddownloadfile';
 import { OnCommandDownloadProject } from '../commands/commanddownloadproject';
 import { OnCommandDownloadTransactionProperties } from '../commands/commanddownloadtransaction';
@@ -55,6 +55,7 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 
 	RegisterCommand('miisync.downloadproject', OnCommandDownloadProject, context);
 	RegisterCommand('miisync.downloadremotefolder', OnCommandDownloadRemoteFolder, context);
+	RegisterCommand('miisync.downloadremotefolderasproject', OnCommandDownloadRemoteFolderAsProject, context);
 	RegisterCommand('miisync.downloadremotefile', OnCommandDownloadRemoteFile, context);
 	RegisterCommand('miisync.downloadremotedirectory', OnCommandDownloadRemoteDirectory, context);
 	RegisterCommand('miisync.downloadfileproperties', OnCommandDownloadFileProperties, context);

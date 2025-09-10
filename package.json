@@ -185,8 +185,8 @@
         "enablement": "miisync.enabled  && miisync.loggedin"
       },
       {
-        "command": "miisync.downloadremotefolder",
-        "title": "Download Remote Folder",
+        "command": "miisync.downloadremotefolderasproject",
+        "title": "Download as Project",
         "icon": "$(arrow-down)",
         "category": "zmii",
         "enablement": "miisync.enabled  && miisync.loggedin"
@@ -291,7 +291,7 @@
           "when": "false"
         },
         {
-          "command": "miisync.downloadremotefolder",
+          "command": "miisync.downloadremotefolderasproject",
           "when": "false"
         },
         {
@@ -361,9 +361,9 @@
           "group": "inline@0"
         },
         {
-          "command": "miisync.downloadremotefolder",
+          "command": "miisync.downloadremotefolderasproject",
           "when": "view == remotedirectory && viewItem == folder",
-          "group": "inline"
+          "group": "inline@0"
         },
         {
           "command": "miisync.openscreen",
