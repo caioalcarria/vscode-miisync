@@ -94,12 +94,42 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 
 
 export function activateTree({ subscriptions }: vscode.ExtensionContext) {
-	subscriptions.push(vscode.window.registerTreeDataProvider('localprojects', localProjectsTree));
+	// Registra os outros tree data providers e decorations
 	subscriptions.push(vscode.window.registerTreeDataProvider('remotedirectory', remoteDirectoryTree));
 	subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('transactionproperties', transactionPropertiesVirtualDoc));
 	subscriptions.push(vscode.window.registerFileDecorationProvider(remoteDirectoryDecorationProvider));
 	subscriptions.push(vscode.window.registerFileDecorationProvider(projectFolderDecorationProvider));
 	subscriptions.push(vscode.window.registerFileDecorationProvider(fileStatusDecorationProvider));
+
+	// Cria a TreeView para Local Projects e configura o badge
+	const localProjectsTreeView = vscode.window.createTreeView('localprojects', {
+		treeDataProvider: localProjectsTree,
+		showCollapseAll: true
+	});
+	subscriptions.push(localProjectsTreeView);
+
+	// Configura o sistema de badge para mostrar total de mudanças
+	const updateBadge = () => {
+		const projects = localProjectsTree.getProjects();
+		const totalModifiedFiles = projects.reduce((total, project) => total + project.modifiedFiles.length, 0);
+		
+		if (totalModifiedFiles > 0) {
+			localProjectsTreeView.badge = {
+				value: totalModifiedFiles,
+				tooltip: `${totalModifiedFiles} arquivo(s) modificado(s)`
+			};
+		} else {
+			localProjectsTreeView.badge = undefined;
+		}
+	};
+
+	// Atualiza o badge sempre que a tree de projetos locais muda
+	localProjectsTree.onDidChangeTreeData(() => {
+		updateBadge();
+	});
+
+	// Atualização inicial do badge
+	updateBadge();
 }
 
 
