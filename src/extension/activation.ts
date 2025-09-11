@@ -26,6 +26,7 @@ import { OnCommandShowFileDiff } from '../commands/commandshowfilediff';
 import { OnCommandVerifyServer } from '../commands/commandverifyserver';
 import { OnCommandShowServerDifferences } from '../commands/commandshowserverdifferences';
 import { OnCommandSearchInProject } from '../commands/commandsearchinproject';
+import { MiiSyncConfigWebViewProvider } from '../ui/webview/miisyncConfigWebViewProvider';
 import { OnDidChangeActiveTextEditor } from '../events/changeactivettexteditor';
 import { onDidChangeConfiguration } from '../events/changeconfiguration';
 import { OnDidOpenTextDocument } from '../events/opentextdocument';
@@ -93,20 +94,29 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 }
 
 
-export function activateTree({ subscriptions }: vscode.ExtensionContext) {
-	// Registra os outros tree data providers e decorations
-	subscriptions.push(vscode.window.registerTreeDataProvider('remotedirectory', remoteDirectoryTree));
-	subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('transactionproperties', transactionPropertiesVirtualDoc));
-	subscriptions.push(vscode.window.registerFileDecorationProvider(remoteDirectoryDecorationProvider));
-	subscriptions.push(vscode.window.registerFileDecorationProvider(projectFolderDecorationProvider));
-	subscriptions.push(vscode.window.registerFileDecorationProvider(fileStatusDecorationProvider));
+// Variável global para o provider de configurações
+let configWebViewProvider: MiiSyncConfigWebViewProvider;
+
+export function activateTree(context: vscode.ExtensionContext) {
+	// Registra os tree data providers
+	context.subscriptions.push(vscode.window.registerTreeDataProvider('remotedirectory', remoteDirectoryTree));
+	context.subscriptions.push(vscode.window.registerTreeDataProvider('localprojects', localProjectsTree));
+	
+	// Registra o WebView provider para configurações
+	configWebViewProvider = new MiiSyncConfigWebViewProvider(context.extensionUri);
+	context.subscriptions.push(vscode.window.registerWebviewViewProvider('miisyncconfig-settings', configWebViewProvider));
+	
+	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('transactionproperties', transactionPropertiesVirtualDoc));
+	context.subscriptions.push(vscode.window.registerFileDecorationProvider(remoteDirectoryDecorationProvider));
+	context.subscriptions.push(vscode.window.registerFileDecorationProvider(projectFolderDecorationProvider));
+	context.subscriptions.push(vscode.window.registerFileDecorationProvider(fileStatusDecorationProvider));
 
 	// Cria a TreeView para Local Projects e configura o badge
 	const localProjectsTreeView = vscode.window.createTreeView('localprojects', {
 		treeDataProvider: localProjectsTree,
 		showCollapseAll: true
 	});
-	subscriptions.push(localProjectsTreeView);
+	context.subscriptions.push(localProjectsTreeView);
 
 	// Configura o sistema de badge para mostrar total de mudanças
 	const updateBadge = () => {

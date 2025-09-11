@@ -379,7 +379,7 @@
         {
           "command": "miisync.refreshlocalprojects",
           "when": "view == localprojects",
-          "group": "navigation"
+          "group": "navigation@0"
         }
       ],
       "view/item/context": [
@@ -502,6 +502,11 @@
           "id": "miisyncbar",
           "title": "MII Sync",
           "icon": "resources/icon_black.svg"
+        },
+        {
+          "id": "miisyncconfig",
+          "title": "MiiSync Configurações",
+          "icon": "$(settings-gear)"
         }
       ]
     },
@@ -519,8 +524,22 @@
           "when": "miisync.enabled",
           "icon": "resources/file.svg"
         }
+      ],
+      "miisyncconfig": [
+        {
+          "id": "miisyncconfig-settings",
+          "name": "Configurações",
+          "type": "webview",
+          "when": "miisync.enabled"
+        }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "localprojects",
+        "contents": "Bem-vindo ao MiiSync! Configure sua extensão para começar.\n\nUse a barra lateral ⚙️ MiiSync Configurações para definir suas configurações.\n\nPrecisa de ajuda? [📖 Ver Documentação](https://github.com/TaBayram/vscode-miisync)"
+      }
+    ],
     "jsonValidation": [
       {
         "fileMatch": "/miisync.json",

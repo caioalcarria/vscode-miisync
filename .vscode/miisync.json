@@ -1,0 +1,32 @@
+{
+  "uploadOnSave": false,
+  "downloadOnOpen": true,
+  "systems": [
+    {
+      "name": "ssdc_QA",
+      "severity": "2-high",
+      "isMain": true,
+      "host": "192.168.1.100",
+      "port": 8000,
+      "username": "usuario.teste",
+      "password": "senha123"
+    }
+  ],
+  "removeFromLocalPath": [
+    "webapp"
+  ],
+  "remotePath": "MES/",
+  "ignore": [
+    "**/.git/**",
+    "**/.svn/**",
+    "**/.vscode/**",
+    "**/node_modules/**",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/*.tmp",
+    "**/*.temp"
+  ],
+  "include": [],
+  "useRootConfig": false,
+  "rootConfig": ""
+}
