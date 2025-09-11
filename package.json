@@ -377,9 +377,44 @@
       ],
       "explorer/context": [
         {
-          "submenu": "miisync.resource",
-          "when": "miisync.enabled",
-          "group": "miisync"
+          "command": "miisync.openrootconfig",
+          "group": "miisync@0",
+          "when": "miisync.enabled && resourceFilename == miisync.json"
+        },
+        {
+          "command": "miisync.openscreen",
+          "group": "miisync@1",
+          "when": "miisync.enabled && resourceFilename =~ /index.*html/"
+        },
+        {
+          "command": "miisync.uploadwithpath",
+          "group": "miisync@2",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.uploadwithbkp",
+          "group": "miisync@3",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.copyserverpath",
+          "group": "miisync@4",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.downloadbroad",
+          "group": "miisync@5",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.transferbroad",
+          "group": "miisync@6",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.deletebroad",
+          "group": "miisync@7",
+          "when": "miisync.enabled"
         },
         {
           "command": "miisync.searchinproject",
@@ -389,9 +424,44 @@
       ],
       "editor/title/context": [
         {
-          "submenu": "miisync.resource",
-          "when": "miisync.enabled",
-          "group": "miisync"
+          "command": "miisync.openrootconfig",
+          "group": "miisync@0",
+          "when": "miisync.enabled && resourceFilename == miisync.json"
+        },
+        {
+          "command": "miisync.openscreen",
+          "group": "miisync@1",
+          "when": "miisync.enabled && resourceFilename =~ /index.*html/"
+        },
+        {
+          "command": "miisync.uploadwithpath",
+          "group": "miisync@2",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.uploadwithbkp",
+          "group": "miisync@3",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.copyserverpath",
+          "group": "miisync@4",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.downloadbroad",
+          "group": "miisync@5",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.transferbroad",
+          "group": "miisync@6",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.deletebroad",
+          "group": "miisync@7",
+          "when": "miisync.enabled"
         }
       ],
       "editor/context": [
@@ -469,84 +539,8 @@
           "when": "view == remotedirectory && viewItem != folder && viewItem != file-loaded",
           "group": "inline@1"
         }
-      ],
-      "miisync.resource": [
-        {
-          "command": "miisync.openrootconfig",
-          "group": "aa@0",
-          "when": "miisync.enabled && resourceFilename == miisync.json"
-        },
-        {
-          "command": "miisync.openscreen",
-          "group": "aa@1",
-          "when": "miisync.enabled && resourceFilename =~ /index.*html/"
-        },
-        {
-          "command": "miisync.uploadwithpath",
-          "group": "ma@0",
-          "when": "miisync.enabled"
-        },
-        {
-          "command": "miisync.uploadwithbkp",
-          "group": "ma@1",
-          "when": "miisync.enabled"
-        },
-        {
-          "command": "miisync.copyserverpath",
-          "group": "ma@2",
-          "when": "miisync.enabled"
-        },
-        {
-          "command": "miisync.downloadbroad",
-          "group": "ma@3",
-          "when": "miisync.enabled"
-        },
-        {
-          "command": "miisync.transferbroad",
-          "group": "ma@4",
-          "when": "miisync.enabled"
-        },
-        {
-          "command": "miisync.deletebroad",
-          "group": "ma@5",
-          "when": "miisync.enabled"
-        }
-      ],
-      "miisync.resourceworkspace": [
-        {
-          "command": "miisync.uploadworkspace",
-          "group": "ma@0",
-          "when": "miisync.enabled"
-        },
-        {
-          "command": "miisync.downloadworkspace",
-          "group": "ma@1",
-          "when": "miisync.enabled"
-        },
-        {
-          "command": "miisync.transferworkspace",
-          "group": "ma@2",
-          "when": "miisync.enabled"
-        },
-        {
-          "command": "miisync.deleteworkspace",
-          "group": "ma@3",
-          "when": "miisync.enabled"
-        }
       ]
     },
-    "submenus": [
-      {
-        "id": "miisync.resource",
-        "label": "MII Sync Actions",
-        "icon": "$(miisync-details)"
-      },
-      {
-        "id": "miisync.resourceworkspace",
-        "label": "MII Sync Actions",
-        "icon": "$(miisync-details)"
-      }
-    ],
     "viewsContainers": {
       "activitybar": [
         {
