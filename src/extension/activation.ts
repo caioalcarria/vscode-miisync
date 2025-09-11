@@ -27,6 +27,7 @@ import { OnCommandVerifyServer } from '../commands/commandverifyserver';
 import { OnCommandShowServerDifferences } from '../commands/commandshowserverdifferences';
 import { OnCommandSearchInProject } from '../commands/commandsearchinproject';
 import { OnCommandOpenProject, OnCommandRefreshProjects } from '../commands/commandprojects';
+import { OnCommandSearchByServerPath } from '../commands/commandsearchbyserverpath';
 import { MiiSyncConfigWebViewProvider } from '../ui/webview/miisyncConfigWebViewProvider';
 import { OnDidChangeActiveTextEditor } from '../events/changeactivettexteditor';
 import { onDidChangeConfiguration } from '../events/changeconfiguration';
@@ -98,6 +99,7 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 	RegisterCommand('miisync.refreshprojects', () => {
 		projectsTree.refresh();
 	}, context);
+	RegisterCommand('miisync.searchbyserverpath', OnCommandSearchByServerPath, context);
 
 }
 

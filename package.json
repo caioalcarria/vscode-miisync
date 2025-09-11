@@ -279,6 +279,12 @@
         "title": "Refresh Projects",
         "icon": "$(refresh)",
         "category": "mii"
+      },
+      {
+        "command": "miisync.searchbyserverpath",
+        "title": "Search by Server Path",
+        "icon": "$(search)",
+        "category": "mii"
       }
     ],
     "menus": {
@@ -400,6 +406,11 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "miisync.searchbyserverpath",
+          "when": "view == projects && viewItem == project",
+          "group": "inline@0"
+        },
         {
           "command": "miisync.uploadmodifiedfile",
           "when": "view == localprojects && viewItem == modifiedfile",
