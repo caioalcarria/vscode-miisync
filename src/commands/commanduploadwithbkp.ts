@@ -129,26 +129,9 @@ export async function commandUploadWithBkp(fileUri?: vscode.Uri) {
                 
                 logger.log(`Upload com server backup concluído com sucesso`);
                 
-                // Pergunta se deseja remover o backup local
-                const removeBackup = await vscode.window.showQuickPick(
-                    ['Sim', 'Não'],
-                    {
-                        placeHolder: 'Remover backup local criado?',
-                        ignoreFocusOut: true
-                    }
-                );
-
-                if (removeBackup === 'Sim') {
-                    try {
-                        fs.unlinkSync(backupFilePath);
-                        logger.log(`Backup local removido: ${backupFilePath}`);
-                    } catch (error) {
-                        logger.log(`Erro ao remover backup local: ${error}`);
-                    }
-                }
-
+                // Mantém o backup local sempre
                 vscode.window.showInformationMessage(
-                    `✅ Upload com server backup concluído!\n${removeBackup === 'Sim' ? 'Backup local removido.' : `Backup local: ${backupFileName}`}`
+                    `✅ Upload com server backup concluído!\nBackup local criado: ${backupFileName}`
                 );
 
             } catch (error) {
