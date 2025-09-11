@@ -96,6 +96,13 @@
         "enablement": "miisync.enabled  && miisync.loggedin"
       },
       {
+        "command": "miisync.uploadwithbkp",
+        "title": "Upload with Server Backup",
+        "icon": "$(versions)",
+        "category": "mii",
+        "enablement": "miisync.enabled  && miisync.loggedin"
+      },
+      {
         "command": "miisync.uploadwithpath",
         "title": "Update on Server...",
         "icon": "$(arrow-up)",
@@ -480,23 +487,28 @@
           "when": "miisync.enabled"
         },
         {
-          "command": "miisync.copyserverpath",
+          "command": "miisync.uploadwithbkp",
           "group": "ma@1",
           "when": "miisync.enabled"
         },
         {
-          "command": "miisync.downloadbroad",
+          "command": "miisync.copyserverpath",
           "group": "ma@2",
           "when": "miisync.enabled"
         },
         {
-          "command": "miisync.transferbroad",
+          "command": "miisync.downloadbroad",
           "group": "ma@3",
           "when": "miisync.enabled"
         },
         {
-          "command": "miisync.deletebroad",
+          "command": "miisync.transferbroad",
           "group": "ma@4",
+          "when": "miisync.enabled"
+        },
+        {
+          "command": "miisync.deletebroad",
+          "group": "ma@5",
           "when": "miisync.enabled"
         }
       ],
