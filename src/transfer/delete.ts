@@ -1,11 +1,12 @@
 import * as path from 'path';
 import { Uri } from "vscode";
+import * as fs from 'fs';
 import { System, UserConfig } from "../extension/system";
 import { IsFatalResponse } from '../miiservice/abstract/filters';
 import { blowoutService } from "../miiservice/blowoutservice";
 import { deleteBatchService } from "../miiservice/deletebatchservice";
-import { GetRemotePath, PrepareUrisForService } from "../modules/file";
-import { CheckSeverity, CheckSeverityFile, CheckSeverityFolder, SeverityOperation } from '../modules/severity';
+import { GetRemotePathWithMapping, PrepareUrisForService } from "../modules/file";
+import { CheckSeverity, CheckSeverityFolder, SeverityOperation } from '../modules/severity';
 import { ActionReturn, ActionType, StartAction } from './action';
 import { DoesFileExist, DoesFolderExist, Validate } from "./gate";
 import { DeleteComplexLimited } from './limited/deletecomplex';
@@ -17,16 +18,30 @@ export async function DeleteFile(uri: Uri, userConfig: UserConfig, system: Syste
     }
     const fileName = path.basename(uri.fsPath);
     const deleteR = async (): Promise<ActionReturn> => {
-        const sourcePath = GetRemotePath(uri.fsPath, userConfig);
+        const sourcePath = await GetRemotePathWithMapping(uri.fsPath, userConfig);
+        if (!sourcePath) {
+            return { aborted: true, error: true, message: "Could not determine remote path for " + fileName };
+        }
         if (!await DoesFileExist(sourcePath, system)) {
             return { aborted: true, error: true, message: fileName + " doesn't exist" };
         }
-        if (!await CheckSeverityFile(uri, SeverityOperation.delete, userConfig, system)) return { aborted: true };
 
+        // Deletar do servidor primeiro
         const response = await deleteBatchService.call(system, sourcePath);
         if (!response) return { aborted: true };
         if (!IsFatalResponse(response)) {
             await blowoutService.call(system, sourcePath);
+            
+            // Após sucesso no servidor, deletar localmente também
+            try {
+                if (fs.existsSync(uri.fsPath)) {
+                    fs.unlinkSync(uri.fsPath);
+                }
+            } catch (error) {
+                // Se falhar a deleção local, apenas log, não aborta a operação
+                console.log(`Erro ao deletar arquivo local: ${error}`);
+            }
+            
             return { aborted: false };
         }
         return { aborted: true, error: true, message: response.Rowsets.FatalError };
@@ -39,17 +54,30 @@ export async function DeleteFolder(uri: Uri, userConfig: UserConfig, system: Sys
     }
     const folderName = path.basename(uri.fsPath);
     const deleteR = async (): Promise<ActionReturn> => {
-        const sourcePath = GetRemotePath(uri.fsPath, userConfig);
+        const sourcePath = await GetRemotePathWithMapping(uri.fsPath, userConfig);
+        if (!sourcePath) {
+            return { aborted: true, error: true, message: "Could not determine remote path for " + folderName };
+        }
         if (!await DoesFolderExist(sourcePath, system)) {
             return { aborted: true, error: true, message: folderName + " doesn't exist" };
         }
-        if (!await CheckSeverityFolder(uri, SeverityOperation.delete, userConfig, system)) return { aborted: true };
 
-
+        // Deletar do servidor primeiro
         const response = await deleteBatchService.call(system, sourcePath);
         if (!response) return { aborted: true };
         if (!IsFatalResponse(response)) {
             await blowoutService.call(system, sourcePath);
+            
+            // Após sucesso no servidor, deletar pasta localmente também
+            try {
+                if (fs.existsSync(uri.fsPath)) {
+                    fs.rmSync(uri.fsPath, { recursive: true, force: true });
+                }
+            } catch (error) {
+                // Se falhar a deleção local, apenas log, não aborta a operação
+                console.log(`Erro ao deletar pasta local: ${error}`);
+            }
+            
             return { aborted: false };
         }
         return { aborted: true, error: true, message: response.Rowsets.FatalError };
