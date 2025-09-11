@@ -257,7 +257,7 @@
       {
         "command": "miisync.verifyserver",
         "title": "Verify Server Integrity",
-        "icon": "$(shield)",
+        "icon": "$(remote)",
         "category": "mii",
         "enablement": "miisync.enabled && miisync.loggedin"
       },
@@ -284,6 +284,12 @@
         "command": "miisync.searchbyserverpath",
         "title": "Search by Server Path",
         "icon": "$(search)",
+        "category": "mii"
+      },
+      {
+        "command": "miisync.deleteproject",
+        "title": "Delete Project Locally",
+        "icon": "$(trash)",
         "category": "mii"
       }
     ],
@@ -412,6 +418,16 @@
           "group": "inline@0"
         },
         {
+          "command": "miisync.verifyserver",
+          "when": "view == projects && viewItem == project",
+          "group": "inline@1"
+        },
+        {
+          "command": "miisync.deleteproject",
+          "when": "view == projects && viewItem == project",
+          "group": "inline@2"
+        },
+        {
           "command": "miisync.uploadmodifiedfile",
           "when": "view == localprojects && viewItem == modifiedfile",
           "group": "inline@0"
@@ -420,11 +436,6 @@
           "command": "miisync.showfilediff",
           "when": "view == localprojects && viewItem == modifiedfile",
           "group": "inline@1"
-        },
-        {
-          "command": "miisync.verifyserver",
-          "when": "view == localprojects && viewItem == localproject",
-          "group": "inline@0"
         },
         {
           "command": "miisync.downloadremotefolderasproject",
