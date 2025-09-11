@@ -1,13 +1,9 @@
-import {
-  SettingItem,
-  miiSyncSettingsProvider,
-} from "../ui/treeview/miisyncSettings";
+import * as vscode from "vscode";
 
 /**
  * Comando para editar uma configuração específica
  */
-export async function OnCommandEditSetting(
-  setting: SettingItem
-): Promise<void> {
-  await miiSyncSettingsProvider.editSetting(setting);
+export async function OnCommandEditSetting(): Promise<void> {
+  // Executa o comando de mostrar configurações
+  await vscode.commands.executeCommand("miisync.showsettings");
 }

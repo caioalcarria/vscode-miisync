@@ -14,6 +14,22 @@ import { DoesFolderExist } from "../gate";
 import limitManager, { LimitedReturn } from "./limited";
 
 /**
+ * Sanitiza um caminho de arquivo para Windows
+ */
+function sanitizeWindowsPath(filePath: string): string {
+  if (!filePath) return filePath;
+
+  // Normaliza e remove caracteres problemáticos
+  return filePath
+    .replace(/[<>"|?*]/g, "_") // Remove caracteres inválidos no Windows
+    .replace(/:/g, (match, offset) => (offset === 1 ? match : "_")) // Mantém apenas o : do drive (C:)
+    .replace(/\s+/g, " ") // Normaliza espaços múltiplos
+    .split(path.sep)
+    .map((part) => part.trim().substring(0, 255)) // Limita cada parte do caminho
+    .join(path.sep);
+}
+
+/**
  * @description if the folder has empty files and folders properties, it means download everything inside rather than download the folder only
  */
 export async function DownloadComplexLimited(
@@ -83,14 +99,23 @@ export async function DownloadComplexLimited(
         const mappingsWithHash = await Promise.all(
           pathMappings.map(async (m: any) => {
             let contentHash: string | undefined;
-            
+
             // Se temos o conteúdo, cria backup e calcula hash
             if (m.fileContent) {
               try {
-                await PathMappingManager.createFileBackup(rootLocalPath, m.localPath, m.fileContent);
-                contentHash = PathMappingManager.calculateContentHash(m.fileContent);
+                await PathMappingManager.createFileBackup(
+                  rootLocalPath,
+                  m.localPath,
+                  m.fileContent
+                );
+                contentHash = PathMappingManager.calculateContentHash(
+                  m.fileContent
+                );
               } catch (error) {
-                console.error('❌ Erro ao processar arquivo para mapeamento:', error);
+                console.error(
+                  "❌ Erro ao processar arquivo para mapeamento:",
+                  error
+                );
               }
             }
 
@@ -101,7 +126,7 @@ export async function DownloadComplexLimited(
               contentHash,
               serverModified: m.serverModified, // Data do servidor
               localModifiedAtDownload: m.localModifiedAtDownload, // Data local no download
-              isBinary: m.isBinary // Se é binário
+              isBinary: m.isBinary, // Se é binário
             };
           })
         );
@@ -111,7 +136,7 @@ export async function DownloadComplexLimited(
           rootRemotePath,
           mappingsWithHash
         );
-        
+
         logger.info(
           `Arquivo de mapeamento criado em: ${rootLocalPath}/.miisync/path-mapping.json`
         );
@@ -124,14 +149,18 @@ export async function DownloadComplexLimited(
 
     // 🚀 NOVO: Dispara evento de projeto baixado + refresh automático
     if (folder.isRemotePath && rootLocalPath && rootRemotePath) {
-        console.log('📁 Download de projeto remoto concluído - disparando eventos...');
-        
-        // Importa dinamicamente para evitar dependência circular
-        const { projectEvents } = await import('../../events/projectevents');
-        projectEvents.fireProjectDownloaded(rootLocalPath, rootRemotePath);
-        
-        const { localProjectsTree } = await import('../../ui/treeview/localprojectstree');
-        localProjectsTree.refresh();
+      console.log(
+        "📁 Download de projeto remoto concluído - disparando eventos..."
+      );
+
+      // Importa dinamicamente para evitar dependência circular
+      const { projectEvents } = await import("../../events/projectevents");
+      projectEvents.fireProjectDownloaded(rootLocalPath, rootRemotePath);
+
+      const { localProjectsTree } = await import(
+        "../../ui/treeview/localprojectstree"
+      );
+      localProjectsTree.refresh();
     }
 
     return { aborted };
@@ -209,10 +238,11 @@ export async function DownloadComplexLimited(
       mainFolder.folder.ChildFileCount == 0 &&
       mainFolder.folder.ChildFolderCount == 0
     ) {
-      const folderPath =
+      const folderPath = sanitizeWindowsPath(
         !mainFolder.isRemotePath && mainFolder.path
           ? mainFolder.path
-          : getPath(mainFolder.folder);
+          : getPath(mainFolder.folder)
+      );
       mkdir(folderPath, { recursive: true });
 
       // Coleta mapeamento para pastas vazias em download de diretório remoto
@@ -258,90 +288,155 @@ export async function DownloadComplexLimited(
     path: string;
     file?: File;
   }) {
-    const localFilePath = filePath || getPath(file);
-    const remotePath = file
-      ? file.FilePath + "/" + file.ObjectName
-      : GetRemotePath(filePath, userConfig);
+    try {
+      const localFilePath = sanitizeWindowsPath(filePath || getPath(file));
+      const remotePath = file
+        ? file.FilePath + "/" + file.ObjectName
+        : GetRemotePath(filePath, userConfig);
 
-    // Coleta mapeamento para download de diretório remoto
-    if (folder.isRemotePath && file) {
-      // Define o caminho raiz na primeira vez
-      if (!rootLocalPath) {
-        rootLocalPath = path.dirname(localFilePath);
-        // Busca pelo diretório pai até encontrar o diretório onde não há mapeamento
-        while (await PathMappingManager.hasMappingFile(rootLocalPath)) {
-          const parent = path.dirname(rootLocalPath);
-          if (parent === rootLocalPath) break;
-          rootLocalPath = parent;
+      // Coleta mapeamento para download de diretório remoto
+      if (folder.isRemotePath && file) {
+        // Define o caminho raiz na primeira vez
+        if (!rootLocalPath) {
+          rootLocalPath = path.dirname(localFilePath);
+          // Busca pelo diretório pai até encontrar o diretório onde não há mapeamento
+          while (await PathMappingManager.hasMappingFile(rootLocalPath)) {
+            const parent = path.dirname(rootLocalPath);
+            if (parent === rootLocalPath) break;
+            rootLocalPath = parent;
+          }
+          rootRemotePath = remotePathRoot;
         }
-        rootRemotePath = remotePathRoot;
-      }
 
-      // Adiciona mapeamento para este arquivo
-      const relativePath = path.relative(rootLocalPath, localFilePath);
-      if (relativePath && !relativePath.startsWith("..")) {
-        pathMappings.push({
-          localPath: relativePath,
-          remotePath: remotePath,
-        });
-      }
-    }
-
-    const response = await readFileService.call(system, remotePath);
-    if (aborted) return;
-    if (response && !IsFatalResponse(response)) {
-      const payload = response?.Rowsets?.Rowset?.Row.find(
-        (row) => row.Name == "Payload"
-      );
-      if (payload) {
-        // Detecta se é arquivo binário baseado na extensão
-        const extension = path.extname(localFilePath).toLowerCase();
-        const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', 
-                                 '.woff', '.woff2', '.ttf', '.otf', '.eot',
-                                 '.pdf', '.zip', '.rar', '.7z', '.exe', '.dll',
-                                 '.mp3', '.mp4', '.avi', '.mov', '.wav'];
-        
-        const isBinary = binaryExtensions.includes(extension);
-        
-        if (isBinary) {
-          // Para arquivos binários, salva como Buffer
-          const binaryContent = Buffer.from(payload.Value, "base64");
-          await outputFile(localFilePath, binaryContent);
-        } else {
-          // Para arquivos de texto, converte para UTF-8
-          const fileContent = Buffer.from(payload.Value, "base64").toString('utf8');
-          await outputFile(localFilePath, fileContent, {
-            encoding: "utf8",
+        // Adiciona mapeamento para este arquivo
+        const relativePath = path.relative(rootLocalPath, localFilePath);
+        if (relativePath && !relativePath.startsWith("..")) {
+          pathMappings.push({
+            localPath: relativePath,
+            remotePath: remotePath,
           });
         }
+      }
 
-        // Se estamos coletando mapeamentos, salva metadata do servidor E local
-        if (folder.isRemotePath && file && rootLocalPath) {
-          const relativePath = path.relative(rootLocalPath, localFilePath);
-          if (relativePath && !relativePath.startsWith("..")) {
-            const mappingIndex = pathMappings.findIndex(m => m.localPath === relativePath);
-            if (mappingIndex !== -1) {
-              // Salva metadata do servidor
-              const serverModified = file.Modified ? new Date(file.Modified) : new Date();
-              
-              // Obtém a data de modificação local do arquivo recém criado
-              const stats = await import('fs-extra').then(fs => fs.stat(localFilePath));
-              const localModifiedAtDownload = stats.mtime;
-              
-              (pathMappings[mappingIndex] as any).serverModified = serverModified.toISOString();
-              (pathMappings[mappingIndex] as any).localModifiedAtDownload = localModifiedAtDownload.toISOString();
-              (pathMappings[mappingIndex] as any).isBinary = isBinary;
-              
-              if (!isBinary) {
-                // Para arquivos de texto, salva o conteúdo para hash
-                const fileContent = Buffer.from(payload.Value, "base64").toString('utf8');
-                (pathMappings[mappingIndex] as any).fileContent = fileContent;
+      const response = await readFileService.call(system, remotePath);
+      if (aborted) return;
+      if (response && !IsFatalResponse(response)) {
+        const payload = response?.Rowsets?.Rowset?.Row.find(
+          (row) => row.Name == "Payload"
+        );
+        if (payload) {
+          // Detecta se é arquivo binário baseado na extensão
+          const extension = path.extname(localFilePath).toLowerCase();
+          const binaryExtensions = [
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".bmp",
+            ".ico",
+            ".svg",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".otf",
+            ".eot",
+            ".pdf",
+            ".zip",
+            ".rar",
+            ".7z",
+            ".exe",
+            ".dll",
+            ".mp3",
+            ".mp4",
+            ".avi",
+            ".mov",
+            ".wav",
+          ];
+
+          const isBinary = binaryExtensions.includes(extension);
+
+          if (isBinary) {
+            // Para arquivos binários, salva como Buffer
+            const binaryContent = Buffer.from(payload.Value, "base64");
+            await outputFile(localFilePath, binaryContent);
+          } else {
+            // Para arquivos de texto, converte para UTF-8
+            const fileContent = Buffer.from(payload.Value, "base64").toString(
+              "utf8"
+            );
+            await outputFile(localFilePath, fileContent, {
+              encoding: "utf8",
+            });
+          }
+
+          // Se estamos coletando mapeamentos, salva metadata do servidor E local
+          if (folder.isRemotePath && file && rootLocalPath) {
+            const relativePath = path.relative(rootLocalPath, localFilePath);
+            if (relativePath && !relativePath.startsWith("..")) {
+              const mappingIndex = pathMappings.findIndex(
+                (m) => m.localPath === relativePath
+              );
+              if (mappingIndex !== -1) {
+                // Salva metadata do servidor
+                const serverModified = file.Modified
+                  ? new Date(file.Modified)
+                  : new Date();
+
+                // Obtém a data de modificação local do arquivo recém criado
+                const stats = await import("fs-extra").then((fs) =>
+                  fs.stat(localFilePath)
+                );
+                const localModifiedAtDownload = stats.mtime;
+
+                (pathMappings[mappingIndex] as any).serverModified =
+                  serverModified.toISOString();
+                (pathMappings[mappingIndex] as any).localModifiedAtDownload =
+                  localModifiedAtDownload.toISOString();
+                (pathMappings[mappingIndex] as any).isBinary = isBinary;
+
+                if (!isBinary) {
+                  // Para arquivos de texto, salva o conteúdo para hash
+                  const fileContent = Buffer.from(
+                    payload.Value,
+                    "base64"
+                  ).toString("utf8");
+                  (pathMappings[mappingIndex] as any).fileContent = fileContent;
+                }
               }
             }
           }
         }
       }
+      return;
+    } catch (error: any) {
+      // Log o erro mas CONTINUA o download dos outros arquivos
+      const fileName = file?.ObjectName || path.basename(filePath || "unknown");
+      logger.error(
+        `Erro ao baixar arquivo '${fileName}': ${error.message || error}`
+      );
+
+      // Se for ENOENT, adiciona ao mapeamento como arquivo com problema
+      if (
+        error.code === "ENOENT" &&
+        folder.isRemotePath &&
+        file &&
+        rootLocalPath
+      ) {
+        const localFilePath = sanitizeWindowsPath(filePath || getPath(file));
+        const remotePath = file.FilePath + "/" + file.ObjectName;
+        const relativePath = path.relative(rootLocalPath, localFilePath);
+        if (relativePath && !relativePath.startsWith("..")) {
+          pathMappings.push({
+            localPath: relativePath,
+            remotePath: remotePath,
+            error: `ENOENT - Arquivo não encontrado: ${error.message}`,
+            skipped: true,
+          } as any);
+        }
+      }
+
+      // CONTINUA sem re-throw - não para o download
+      return;
     }
-    return;
   }
 }
