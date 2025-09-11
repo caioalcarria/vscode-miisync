@@ -1,8 +1,8 @@
 {
   "name": "miisync",
-  "displayName": "MII Sync",
-  "description": "Sync projects in MII server",
-  "publisher": "NTTDataTurkiyeMII",
+  "displayName": "MII WEB SYNC",
+  "description": "Sync web projects with MII server including backup, download recovery and path mapping",
+  "publisher": "caioalcarria",
   "author": {
     "name": "TaBayram",
     "url": "https://github.com/TaBayram"
