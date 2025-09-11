@@ -26,6 +26,7 @@ import { OnCommandShowFileDiff } from '../commands/commandshowfilediff';
 import { OnCommandVerifyServer } from '../commands/commandverifyserver';
 import { OnCommandShowServerDifferences } from '../commands/commandshowserverdifferences';
 import { OnCommandSearchInProject } from '../commands/commandsearchinproject';
+import { OnCommandOpenProject, OnCommandRefreshProjects } from '../commands/commandprojects';
 import { MiiSyncConfigWebViewProvider } from '../ui/webview/miisyncConfigWebViewProvider';
 import { OnDidChangeActiveTextEditor } from '../events/changeactivettexteditor';
 import { onDidChangeConfiguration } from '../events/changeconfiguration';
@@ -36,6 +37,7 @@ import { projectFolderDecorationProvider } from '../ui/decorations/projectfolder
 import { fileStatusDecorationProvider } from '../ui/decorations/filestatusdecorations';
 import { remoteDirectoryTree } from '../ui/treeview/remotedirectorytree';
 import { localProjectsTree } from '../ui/treeview/localprojectstree';
+import { projectsTree } from '../ui/treeview/projectsTree';
 import transactionPropertiesVirtualDoc from '../ui/virtualdocument/transactionproperties';
 
 
@@ -91,6 +93,12 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 	RegisterCommand('miisync.showserverdifferences', OnCommandShowServerDifferences, context);
 	RegisterCommand('miisync.searchinproject', OnCommandSearchInProject, context);
 
+	// Projects Commands
+	RegisterCommand('miisync.openproject', OnCommandOpenProject, context);
+	RegisterCommand('miisync.refreshprojects', () => {
+		projectsTree.refresh();
+	}, context);
+
 }
 
 
@@ -100,6 +108,7 @@ let configWebViewProvider: MiiSyncConfigWebViewProvider;
 export function activateTree(context: vscode.ExtensionContext) {
 	// Registra os tree data providers
 	context.subscriptions.push(vscode.window.registerTreeDataProvider('remotedirectory', remoteDirectoryTree));
+	context.subscriptions.push(vscode.window.registerTreeDataProvider('projects', projectsTree));
 	context.subscriptions.push(vscode.window.registerTreeDataProvider('localprojects', localProjectsTree));
 	
 	// Registra o WebView provider para configurações

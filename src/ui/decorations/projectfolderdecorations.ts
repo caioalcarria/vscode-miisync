@@ -11,7 +11,22 @@ class ProjectFolderDecorationProvider implements vscode.FileDecorationProvider {
         // Atualiza decorações quando projetos mudam
         localProjectsTree.onDidChangeTreeData(() => {
             this._onDidChangeFileDecorations.fire(undefined);
+            
+            // Também notificar a aba Projects
+            this.notifyProjectsTree();
         });
+    }
+
+    private notifyProjectsTree(): void {
+        try {
+            // Importar dinamicamente para evitar dependência circular
+            const projectsTreeModule = require('../treeview/projectsTree');
+            if (projectsTreeModule.projectsTree) {
+                projectsTreeModule.projectsTree.refresh();
+            }
+        } catch (error) {
+            // Ignorar erro se não conseguir importar
+        }
     }
 
     provideFileDecoration(uri: vscode.Uri): vscode.ProviderResult<vscode.FileDecoration> {

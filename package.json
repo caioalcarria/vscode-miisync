@@ -267,6 +267,18 @@
         "icon": "$(diff)",
         "category": "mii",
         "enablement": "miisync.enabled"
+      },
+      {
+        "command": "miisync.openproject",
+        "title": "Open Project",
+        "icon": "$(folder-opened)",
+        "category": "mii"
+      },
+      {
+        "command": "miisync.refreshprojects",
+        "title": "Refresh Projects",
+        "icon": "$(refresh)",
+        "category": "mii"
       }
     ],
     "menus": {
@@ -374,6 +386,11 @@
         {
           "command": "miisync.downloadremotedirectory",
           "when": "view == remotedirectory",
+          "group": "navigation"
+        },
+        {
+          "command": "miisync.refreshprojects",
+          "when": "view == projects",
           "group": "navigation"
         },
         {
@@ -523,6 +540,12 @@
           "name": "Local Changes",
           "when": "miisync.enabled",
           "icon": "resources/file.svg"
+        },
+        {
+          "id": "projects",
+          "name": "Projects",
+          "when": "miisync.enabled",
+          "icon": "$(folder-library)"
         }
       ],
       "miisyncconfig": [
@@ -535,6 +558,10 @@
       ]
     },
     "viewsWelcome": [
+      {
+        "view": "projects",
+        "contents": "Nenhum projeto baixado encontrado.\n\n[🔄 Atualizar Lista](command:miisync.refreshprojects)\n\nProjetos baixados do servidor aparecem automaticamente aqui."
+      },
       {
         "view": "localprojects",
         "contents": "Bem-vindo ao MiiSync! Configure sua extensão para começar.\n\nUse a barra lateral ⚙️ MiiSync Configurações para definir suas configurações.\n\nPrecisa de ajuda? [📖 Ver Documentação](https://github.com/TaBayram/vscode-miisync)"
