@@ -22,6 +22,9 @@ export interface LocalFileMapping {
 
   /** Data da última verificação/atualização */
   lastChecked: Date;
+
+  /** Data de modificação registrada do servidor (se conhecida) */
+  serverModified?: Date;
 }
 
 export interface LocalFilesMappingData {

@@ -298,6 +298,13 @@
         "title": "Delete Project Locally",
         "icon": "$(trash)",
         "category": "mii"
+      },
+      {
+        "command": "miisync.syncproject",
+        "title": "Sync Project (Download & Replace)",
+        "icon": "$(cloud-download)",
+        "category": "mii",
+        "enablement": "miisync.enabled"
       }
     ],
     "menus": {
@@ -503,6 +510,11 @@
           "command": "miisync.deleteproject",
           "when": "view == projects && viewItem == project",
           "group": "inline@2"
+        },
+        {
+          "command": "miisync.syncproject",
+          "when": "view == projects && viewItem == project",
+          "group": "inline@3"
         },
         {
           "command": "miisync.uploadmodifiedfile",

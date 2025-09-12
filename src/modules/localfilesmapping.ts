@@ -88,6 +88,9 @@ export class LocalFilesMappingManager {
             lastModified: new Date((fileData as any).lastModified),
             createdAt: new Date((fileData as any).createdAt),
             lastChecked: new Date((fileData as any).lastChecked),
+            serverModified: (fileData as any).serverModified
+              ? new Date((fileData as any).serverModified)
+              : undefined,
           };
         }
 
@@ -167,6 +170,7 @@ export class LocalFilesMappingManager {
       status,
       createdAt: existingFile?.createdAt || now,
       lastChecked: now,
+      serverModified: existingFile?.serverModified,
     };
 
     await this.saveMapping();
