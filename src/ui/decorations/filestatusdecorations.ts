@@ -39,7 +39,43 @@ class FileStatusDecorationProvider implements vscode.FileDecorationProvider {
       // Atualiza decorações para os arquivos alterados
       const uris = changedFiles.map((filePath) => vscode.Uri.file(filePath));
       this._onDidChangeFileDecorations.fire(uris);
+
+      // Força um refresh geral das decorações para garantir sincronização
+      setTimeout(() => {
+        this._onDidChangeFileDecorations.fire(undefined);
+      }, 100);
     });
+
+    // Verificação periódica para garantir sincronização
+    setInterval(() => {
+      this.performPeriodicSync();
+    }, 10000); // A cada 10 segundos
+  }
+
+  /**
+   * Verificação periódica para garantir sincronização entre sistema de mapeamento e decorações
+   */
+  private async performPeriodicSync(): Promise<void> {
+    try {
+      const filesWithChanges =
+        localFilesMappingManager.getFilesWithLocalChanges();
+      const changedUris: vscode.Uri[] = [];
+
+      // Verifica se há inconsistências
+      for (const file of filesWithChanges) {
+        const uri = vscode.Uri.file(file.localPath);
+        changedUris.push(uri);
+      }
+
+      if (changedUris.length > 0) {
+        console.log(
+          `🔄 Sincronização periódica: ${changedUris.length} arquivos verificados`
+        );
+        this._onDidChangeFileDecorations.fire(changedUris);
+      }
+    } catch (error) {
+      console.error("❌ Erro na sincronização periódica:", error);
+    }
   }
 
   private async loadInitialFileHashes(): Promise<void> {
@@ -146,15 +182,30 @@ class FileStatusDecorationProvider implements vscode.FileDecorationProvider {
     // 🚀 NOVO: Verifica se existe no mapeamento JSON
     const mappedFile = localFilesMappingManager.getFile(filePath);
     if (mappedFile) {
-      // Verifica se foi realmente modificado
-      const isModified = await localFilesMappingManager.checkIfFileModified(
-        filePath
-      );
-      console.log(
-        `📁 Arquivo salvo (mapeado): ${path.basename(
-          filePath
-        )} - Modificado: ${isModified}`
-      );
+      // Verifica se foi realmente modificado comparando hash atual com original
+      const isModified = currentHash !== mappedFile.originalHash;
+
+      // Atualiza o sistema de mapeamento apenas se o estado mudou
+      if (isModified !== mappedFile.hasLocalChanges) {
+        const newStatus = isModified ? "modified" : "unchanged";
+        await localFilesMappingManager.addOrUpdateFile(
+          filePath,
+          mappedFile.remotePath,
+          isModified,
+          newStatus
+        );
+
+        console.log(
+          `� Arquivo salvo e atualizado: ${path.basename(filePath)} - ${
+            isModified ? "MODIFICADO" : "ORIGINAL"
+          }`
+        );
+      } else {
+        console.log(
+          `💾 Arquivo salvo (sem mudança de estado): ${path.basename(filePath)}`
+        );
+      }
+
       return; // O evento será disparado pelo sistema de mapeamento
     }
 
@@ -217,7 +268,39 @@ class FileStatusDecorationProvider implements vscode.FileDecorationProvider {
       return;
     }
 
-    // Para arquivos em edição, verifica se o conteúdo atual é diferente do original
+    // 🚀 NOVO: Verifica primeiro no sistema de mapeamento JSON
+    const mappedFile = localFilesMappingManager.getFile(filePath);
+    if (mappedFile) {
+      // Para arquivos mapeados, usa verificação por hash do sistema JSON
+      try {
+        const document = await vscode.workspace.openTextDocument(uri);
+        const currentContent = document.getText();
+        const currentHash = crypto
+          .createHash("md5")
+          .update(currentContent)
+          .digest("hex");
+
+        const isModified = currentHash !== mappedFile.originalHash;
+
+        // Atualiza o sistema de mapeamento se o estado mudou
+        if (isModified !== mappedFile.hasLocalChanges) {
+          await localFilesMappingManager.updateLocalChangesFlag(
+            filePath,
+            isModified
+          );
+          console.log(
+            `📝 Estado de modificação atualizado: ${path.basename(
+              filePath
+            )} - ${isModified ? "modificado" : "original"}`
+          );
+        }
+      } catch (error) {
+        console.error("❌ Erro ao verificar modificação em tempo real:", error);
+      }
+      return; // Sistema de mapeamento dispara os eventos necessários
+    }
+
+    // 🔄 SISTEMA LEGADO para arquivos não mapeados
     try {
       const document = await vscode.workspace.openTextDocument(uri);
       const currentContent = document.getText();
@@ -257,7 +340,13 @@ class FileStatusDecorationProvider implements vscode.FileDecorationProvider {
 
     // 🚀 NOVO: Verifica primeiro no sistema de mapeamento JSON
     const mappedFile = localFilesMappingManager.getFile(filePath);
-    if (mappedFile && mappedFile.hasLocalChanges) {
+    if (mappedFile) {
+      // Se arquivo está no mapeamento mas NÃO tem alterações locais, não mostra decoração
+      if (!mappedFile.hasLocalChanges) {
+        return undefined;
+      }
+
+      // Arquivo tem alterações locais - mostra decoração baseada no status
       switch (mappedFile.status) {
         case "added":
           return {
@@ -326,11 +415,26 @@ class FileStatusDecorationProvider implements vscode.FileDecorationProvider {
   }
 
   public refresh(): void {
+    console.log("🔄 Forçando refresh completo das decorações...");
+
+    // Força verificação de todos os arquivos mapeados
+    localFilesMappingManager.checkAllFiles();
+
+    // Atualiza todas as decorações
     this._onDidChangeFileDecorations.fire(undefined);
   }
 
   public dispose(): void {
-    // Cleanup se necessário
+    // Cleanup dos watchers
+    this.fileWatchers.forEach((watcher) => {
+      if (watcher && typeof watcher.dispose === "function") {
+        watcher.dispose();
+      }
+    });
+    this.fileWatchers.clear();
+
+    // Cleanup do event emitter
+    this._onDidChangeFileDecorations.dispose();
   }
 }
 
