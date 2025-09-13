@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as fs from "fs-extra";
 import * as path from "path";
 import * as vscode from "vscode";
@@ -90,6 +91,9 @@ export async function OnCommandSyncProject(projectItem: any) {
       return;
     }
 
+    // Limpa entradas órfãs (arquivos que não existem mais localmente) para evitar falsos "modified"
+    await pruneMissingLocalEntries(projectPath);
+
     // Coleta metadados remotos (lista de arquivos) para contagem de divergências
     const diffInfo = await collectRemoteDifferences(remotePath, projectPath);
 
@@ -100,18 +104,56 @@ export async function OnCommandSyncProject(projectItem: any) {
       `Novos no remoto: ${diffInfo.newRemote.length}`,
       `Removidos no remoto: ${diffInfo.removedRemote.length}`,
     ];
-    const confirmation = await vscode.window.showInformationMessage(
-      `Sincronizar projeto "${projectName}"?`,
-      {
-        modal: true,
-        detail:
-          popupDetailLines.join("\n") + "\n\nEscolha o modo ou veja detalhes.",
-      },
-      "Incremental",
-      "Completa",
-      "Detalhes",
-      "Cancelar"
+    // Coleta arquivos locais modificados (mapping manager)
+    const localModified = localFilesMappingManager
+      .getFilesWithLocalChanges()
+      .filter((f) => f.localPath.startsWith(projectPath + path.sep));
+    const localModifiedRemotePaths = new Set(
+      localModified
+        .filter((f) => f.remotePath)
+        .map((f) => normalizeRemote(f.remotePath))
     );
+    // Conflitos: arquivo modificado remotamente E localmente
+    const conflicts = diffInfo.modifiedRemote.filter((r) =>
+      localModifiedRemotePaths.has(r)
+    );
+
+    let confirmation: string | undefined;
+    if (conflicts.length === 0) {
+      // Fluxo antigo porém sem bloquear por modificações locais: oferecemos incremental direta / completa
+      confirmation = await vscode.window.showInformationMessage(
+        `Sincronizar projeto "${projectName}"?`,
+        {
+          modal: true,
+          detail:
+            popupDetailLines.join("\n") +
+            `\n\nModificações locais: ${localModified.length}\nNenhum conflito detectado.`,
+        },
+        "Incremental",
+        "Completa",
+        "Detalhes",
+        "Cancelar"
+      );
+    } else {
+      confirmation = await vscode.window.showInformationMessage(
+        `Conflitos encontrados em ${conflicts.length} arquivo(s)`,
+        {
+          modal: true,
+          detail:
+            popupDetailLines.join("\n") +
+            `\n\nModificações locais: ${localModified.length}` +
+            `\nConflitos: ${conflicts.length}` +
+            `\n\nEscolha:` +
+            `\nA) Parcial (preserva locais conflitantes)` +
+            `\nB) Sobrescrever (usa remoto nos conflitantes)` +
+            `\nDetalhes para inspeção individual.`,
+        },
+        "Parcial",
+        "Sobrescrever",
+        "Detalhes",
+        "Cancelar"
+      );
+    }
     if (!confirmation || confirmation === "Cancelar") return;
     if (confirmation === "Detalhes") {
       vscode.commands.executeCommand("miisync.showSyncDifferences", {
@@ -123,14 +165,8 @@ export async function OnCommandSyncProject(projectItem: any) {
       return;
     }
 
-    // Verifica modificações locais
-    const modified = await hasLocalModifications(projectPath);
-    if (modified) {
-      vscode.window.showWarningMessage(
-        `Sincronização cancelada: existem modificações locais no projeto "${projectName}".`
-      );
-      return;
-    }
+    // Tratamento de opções com/sem conflitos
+    const isConflictScenario = conflicts.length > 0;
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceFolder) {
@@ -200,7 +236,7 @@ export async function OnCommandSyncProject(projectItem: any) {
       }
     }
 
-    if (confirmation === "Completa") {
+    if (confirmation === "Completa" || confirmation === "Sobrescrever") {
       let downloadOk = false;
       await vscode.window.withProgress(
         {
@@ -227,19 +263,44 @@ export async function OnCommandSyncProject(projectItem: any) {
           await fs.remove(tempFolder).catch(() => {});
         return;
       }
+      // Reconstroi baseline (hash + status limpo) para todos os arquivos do projeto recém baixado
+      await rebuildProjectBaseline(projectPath, remotePath);
+      // Atualiza metadados de serverModified após baseline de conteúdo
+      await updateServerModifiedBaseline(remotePath);
       vscode.window.showInformationMessage(
         `Projeto "${projectName}" sincronizado (completo).`
       );
       vscode.commands.executeCommand("miisync.refreshprojects");
       vscode.commands.executeCommand("miisync.refreshlocalprojects");
-      updateServerModifiedBaseline(remotePath).catch(() => {});
       return;
-    } else if (confirmation === "Incremental") {
+    } else if (confirmation === "Incremental" || confirmation === "Parcial") {
+      // Se for parcial e havia conflitos, precisamos filtrar diffInfo para NÃO incluir os conflitos em modifiedRemote
+      let effectiveDiff = diffInfo;
+      let conflictsList: string[] = [];
+      if (confirmation === "Parcial") {
+        const localModified = localFilesMappingManager
+          .getFilesWithLocalChanges()
+          .filter(
+            (f) =>
+              f.localPath.startsWith(projectPath + path.sep) && f.remotePath
+          );
+        const localSet = new Set(
+          localModified.map((f) => normalizeRemote(f.remotePath || ""))
+        );
+        conflictsList = diffInfo.modifiedRemote.filter((r) => localSet.has(r));
+        effectiveDiff = {
+          ...diffInfo,
+          modifiedRemote: diffInfo.modifiedRemote.filter(
+            (r) => !localSet.has(r)
+          ),
+        };
+      }
       await applyIncrementalSync({
         projectPath,
         projectName,
         remotePath,
-        diffInfo,
+        diffInfo: effectiveDiff,
+        conflicts: conflictsList,
       });
       return;
     }
@@ -468,7 +529,10 @@ async function collectRemoteDifferences(
 }
 
 // Atualiza serverModified no mapping para arquivos do projeto após sync
-async function updateServerModifiedBaseline(remoteRoot: string) {
+async function updateServerModifiedBaseline(
+  remoteRoot: string,
+  ignoreRemotePaths: string[] = []
+) {
   try {
     const system = configManager.CurrentSystem as System;
     const userConfig = await configManager.load();
@@ -494,10 +558,12 @@ async function updateServerModifiedBaseline(remoteRoot: string) {
     }
     // Atualizar mapping existente
     let updates = 0;
+    const ignoreSet = new Set(ignoreRemotePaths.map((r) => normalizeRemote(r)));
     for (const file of localFilesMappingManager.getAllFiles()) {
       if (!file.remotePath) continue;
       const rNorm = normalizeRemote(file.remotePath);
       if (rNorm === normRoot || rNorm.startsWith(normRoot + "/")) {
+        if (ignoreSet.has(rNorm)) continue; // preserva baseline local de conflitos
         const ts = remoteMap.get(rNorm);
         if (ts) {
           (file as any).serverModified = new Date(ts);
@@ -538,6 +604,7 @@ interface IncrementalSyncParams {
   projectName: string;
   remotePath: string;
   diffInfo: RemoteDiffInfo;
+  conflicts?: string[]; // remote paths em conflito para preservar metadados locais
 }
 
 async function applyIncrementalSync({
@@ -545,6 +612,7 @@ async function applyIncrementalSync({
   projectName,
   remotePath,
   diffInfo,
+  conflicts = [],
 }: IncrementalSyncParams) {
   const system = configManager.CurrentSystem as System;
   const userConfig = await configManager.load();
@@ -565,8 +633,10 @@ async function applyIncrementalSync({
   }
 
   // Operações planejadas
+  const conflictSet = new Set(conflicts);
   const toAdd = diffInfo.newRemote.slice();
-  const toUpdate = diffInfo.modifiedRemote.slice();
+  // Em modo parcial já removemos conflitos de modifiedRemote antes de entrar aqui, mas garantimos filtragem defensiva.
+  const toUpdate = diffInfo.modifiedRemote.filter((r) => !conflictSet.has(r));
   const toRemove = diffInfo.removedRemote.slice();
 
   console.log("[sync][incremental] planejamento:", {
@@ -606,6 +676,7 @@ async function applyIncrementalSync({
             data.isBinary ? undefined : ({ encoding: "utf8" } as any)
           );
           // Atualiza mapping garantindo estado limpo (unchanged)
+          // Se não é conflito (garantia), atualiza baseline
           await localFilesMappingManager.addOrUpdateFile(
             localPath,
             remoteFile,
@@ -615,7 +686,6 @@ async function applyIncrementalSync({
           const fileEntry = localFilesMappingManager.getFile(localPath);
           if (fileEntry) {
             (fileEntry as any).serverModified = data.modified;
-            // Ajusta lastModified para refletir momento do download como baseline
             fileEntry.lastModified = new Date();
             fileEntry.hasLocalChanges = false;
             fileEntry.status = "unchanged";
@@ -649,7 +719,8 @@ async function applyIncrementalSync({
   );
 
   // Atualiza baseline final
-  updateServerModifiedBaseline(remotePath).catch(() => {});
+  // Atualiza baseline ignorando conflitos
+  updateServerModifiedBaseline(remotePath, conflicts).catch(() => {});
   try {
     await updateLegacyPathMapping(projectPath, remotePath, diffInfo);
   } catch (err) {
@@ -805,5 +876,95 @@ async function updateLegacyPathMapping(
     await fs.writeJson(mappingFile, data, { spaces: 2 });
   } catch (err) {
     console.warn("[sync][incremental] erro ao atualizar mapping legado", err);
+  }
+}
+
+// Remove entradas do mapping cujos arquivos não existem mais localmente (exclusão manual da pasta / limpeza fora do VS Code)
+async function pruneMissingLocalEntries(projectPath: string) {
+  try {
+    const all = localFilesMappingManager.getAllFiles();
+    const toRemove: string[] = [];
+    for (const f of all) {
+      if (f.localPath.startsWith(projectPath + path.sep)) {
+        try {
+          if (!(await fs.pathExists(f.localPath))) {
+            toRemove.push(f.localPath);
+          }
+        } catch {
+          toRemove.push(f.localPath);
+        }
+      }
+    }
+    for (const p of toRemove) {
+      await localFilesMappingManager.removeFile(p);
+    }
+    if (toRemove.length) {
+      console.log(
+        "[sync][baseline] Entradas órfãs removidas:",
+        toRemove.length
+      );
+    }
+  } catch (err) {
+    console.warn("[sync][baseline] Falha pruneMissingLocalEntries", err);
+  }
+}
+
+// Recria baseline para todos os arquivos existentes no projeto recém baixado
+async function rebuildProjectBaseline(projectPath: string, remoteRoot: string) {
+  try {
+    const exists = await fs.pathExists(projectPath);
+    if (!exists) return;
+    const normRoot = normalizeRemote(remoteRoot);
+
+    async function walk(dir: string): Promise<string[]> {
+      const out: string[] = [];
+      const entries = await fs.readdir(dir);
+      for (const e of entries) {
+        if (e === ".miisync") continue; // ignora metadados
+        const full = path.join(dir, e);
+        const stat = await fs.stat(full);
+        if (stat.isDirectory()) {
+          out.push(...(await walk(full)));
+        } else if (stat.isFile()) {
+          out.push(full);
+        }
+      }
+      return out;
+    }
+
+    const files = await walk(projectPath);
+    for (const localAbs of files) {
+      // detectar remote path relativo
+      const rel = path
+        .relative(projectPath, localAbs)
+        .split(path.sep)
+        .join("/");
+      const remotePathFull = rel ? normRoot + "/" + rel : normRoot;
+      // hash
+      let contentHash: string | undefined;
+      try {
+        const buf = await fs.readFile(localAbs);
+        contentHash = crypto.createHash("md5").update(buf).digest("hex");
+      } catch {}
+      await localFilesMappingManager.addOrUpdateFile(
+        localAbs,
+        remotePathFull,
+        false,
+        "unchanged"
+      );
+      const entry = localFilesMappingManager.getFile(localAbs);
+      if (entry) {
+        entry.hasLocalChanges = false;
+        entry.status = "unchanged";
+        if (contentHash) entry.originalHash = contentHash;
+      }
+    }
+    console.log(
+      "[sync][baseline] Baseline reconstruída para",
+      files.length,
+      "arquivos."
+    );
+  } catch (err) {
+    console.warn("[sync][baseline] Falha rebuildProjectBaseline", err);
   }
 }
