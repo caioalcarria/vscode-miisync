@@ -95,32 +95,23 @@ export async function OnCommandSyncProject(projectItem: any) {
 
     const popupDetailLines: string[] = [
       `Caminho remoto: ${remotePath}`,
-      `Arquivos remotos encontrados: ${diffInfo.totalRemoteFiles}`,
-      `Arquivos com data remota diferente do mapeamento local: ${diffInfo.modifiedRemoteCount}`,
+      `Total arquivos remotos: ${diffInfo.totalRemoteFiles}`,
+      `Modificados remotamente: ${diffInfo.modifiedRemote.length}`,
+      `Novos no remoto: ${diffInfo.newRemote.length}`,
+      `Removidos no remoto: ${diffInfo.removedRemote.length}`,
     ];
-    if (diffInfo.unmappedRemoteCount > 0) {
-      popupDetailLines.push(
-        `Arquivos remotos não mapeados localmente: ${diffInfo.unmappedRemoteCount}`
-      );
-    }
-    if (diffInfo.mappingFilesWithoutRemote > 0) {
-      popupDetailLines.push(
-        `Arquivos no mapeamento que não existem mais no remoto: ${diffInfo.mappingFilesWithoutRemote}`
-      );
-    }
-
     const confirmation = await vscode.window.showInformationMessage(
       `Sincronizar projeto "${projectName}"?`,
       {
         modal: true,
         detail:
-          popupDetailLines.join("\n") +
-          "\n\nA sincronização irá substituir a versão local somente se não houver modificações locais.",
+          popupDetailLines.join("\n") + "\n\nEscolha o modo de sincronização.",
       },
-      "Sim",
+      "Incremental",
+      "Completa",
       "Cancelar"
     );
-    if (confirmation !== "Sim") return;
+    if (!confirmation || confirmation === "Cancelar") return;
 
     // Verifica modificações locais
     const modified = await hasLocalModifications(projectPath);
@@ -199,48 +190,49 @@ export async function OnCommandSyncProject(projectItem: any) {
       }
     }
 
-    let downloadOk = false;
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: `Baixando versão remota de "${projectName}"...`,
-        cancellable: false,
-      },
-      async () => {
-        downloadOk = await downloadToTemporaryFolder();
-      }
-    );
-
-    if (!downloadOk) {
-      vscode.window.showErrorMessage(
-        `Falha ao baixar versão remota do projeto "${projectName}".`
+    if (confirmation === "Completa") {
+      let downloadOk = false;
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Baixando versão remota de "${projectName}"...`,
+          cancellable: false,
+        },
+        async () => {
+          downloadOk = await downloadToTemporaryFolder();
+        }
       );
+      if (!downloadOk) {
+        vscode.window.showErrorMessage(
+          `Falha ao baixar versão remota do projeto "${projectName}".`
+        );
+        return;
+      }
+      try {
+        if (fs.existsSync(projectPath)) await fs.remove(projectPath);
+        await fs.move(tempFolder, projectPath, { overwrite: true });
+      } catch (err) {
+        vscode.window.showErrorMessage(`Falha ao substituir projeto: ${err}`);
+        if (fs.existsSync(tempFolder))
+          await fs.remove(tempFolder).catch(() => {});
+        return;
+      }
+      vscode.window.showInformationMessage(
+        `Projeto "${projectName}" sincronizado (completo).`
+      );
+      vscode.commands.executeCommand("miisync.refreshprojects");
+      vscode.commands.executeCommand("miisync.refreshlocalprojects");
+      updateServerModifiedBaseline(remotePath).catch(() => {});
+      return;
+    } else if (confirmation === "Incremental") {
+      await applyIncrementalSync({
+        projectPath,
+        projectName,
+        remotePath,
+        diffInfo,
+      });
       return;
     }
-
-    // Substituição segura
-    try {
-      if (fs.existsSync(projectPath)) {
-        await fs.remove(projectPath);
-      }
-      await fs.move(tempFolder, projectPath, { overwrite: true });
-    } catch (err) {
-      vscode.window.showErrorMessage(`Falha ao substituir projeto: ${err}`);
-      // cleanup se temp ainda existe
-      if (fs.existsSync(tempFolder)) {
-        await fs.remove(tempFolder).catch(() => {});
-      }
-      return;
-    }
-
-    vscode.window.showInformationMessage(
-      `Projeto "${projectName}" sincronizado com sucesso.`
-    );
-    vscode.commands.executeCommand("miisync.refreshprojects");
-    vscode.commands.executeCommand("miisync.refreshlocalprojects");
-
-    // Atualiza baseline serverModified para evitar falsos positivos na próxima preflight
-    updateServerModifiedBaseline(remotePath).catch(() => {});
   } catch (error) {
     console.error("Erro na sincronização do projeto:", error);
     vscode.window.showErrorMessage(`Erro ao sincronizar projeto: ${error}`);
@@ -252,6 +244,9 @@ interface RemoteDiffInfo {
   modifiedRemoteCount: number;
   unmappedRemoteCount: number;
   mappingFilesWithoutRemote: number;
+  modifiedRemote: string[];
+  newRemote: string[];
+  removedRemote: string[];
 }
 
 function normalizeRemote(p: string): string {
@@ -271,6 +266,9 @@ async function collectRemoteDifferences(
     modifiedRemoteCount: 0,
     unmappedRemoteCount: 0,
     mappingFilesWithoutRemote: 0,
+    modifiedRemote: [],
+    newRemote: [],
+    removedRemote: [],
   };
   try {
     const system = configManager.CurrentSystem as System;
@@ -368,6 +366,7 @@ async function collectRemoteDifferences(
       const mapped = mappingByRemote.get(rf.norm);
       if (!mapped) {
         result.unmappedRemoteCount++;
+        result.newRemote.push(rf.norm);
         console.log("[sync][debug] unmapped remote file:", rf.norm);
         continue;
       }
@@ -387,6 +386,7 @@ async function collectRemoteDifferences(
         if (remoteModified && baseline != null) {
           if (remoteModified - baseline > toleranceMs) {
             result.modifiedRemoteCount++;
+            result.modifiedRemote.push(rf.norm);
             console.log(
               "[sync][debug] modified remote NEWER:",
               rf.norm,
@@ -421,7 +421,21 @@ async function collectRemoteDifferences(
 
     for (const m of uniqueProjectMapping) {
       if (!seenRemote.has(m.norm)) {
+        // Verifica se o arquivo local ainda existe; se não existe, pode ser resíduo de mapping antigo
+        const localPath = m.raw.localPath;
+        let localExists = false;
+        try {
+          localExists = await fs.pathExists(localPath);
+        } catch {
+          /* ignore */
+        }
+        if (!localExists) {
+          // Limpa silenciosamente do mapping para evitar falsos positivos
+          await localFilesMappingManager.removeFile(localPath);
+          continue;
+        }
         result.mappingFilesWithoutRemote++;
+        result.removedRemote.push(m.norm);
         console.log("[sync][debug] mapping file missing remotely:", m.norm);
       }
     }
@@ -495,5 +509,280 @@ async function updateServerModifiedBaseline(remoteRoot: string) {
       "[sync][debug] falha ao atualizar baseline serverModified:",
       err
     );
+  }
+}
+
+interface IncrementalSyncParams {
+  projectPath: string;
+  projectName: string;
+  remotePath: string;
+  diffInfo: RemoteDiffInfo;
+}
+
+async function applyIncrementalSync({
+  projectPath,
+  projectName,
+  remotePath,
+  diffInfo,
+}: IncrementalSyncParams) {
+  const system = configManager.CurrentSystem as System;
+  const userConfig = await configManager.load();
+  if (!userConfig) {
+    vscode.window.showErrorMessage(
+      "Configuração não encontrada para sync incremental."
+    );
+    return;
+  }
+
+  const normRoot = normalizeRemote(remotePath);
+  const workspaceRoot = projectPath; // já é o path local do projeto
+
+  // Helper para converter remote path -> local path
+  function remoteToLocal(r: string): string {
+    const rel = r === normRoot ? "" : r.substring(normRoot.length + 1);
+    return path.join(workspaceRoot, rel.split("/").join(path.sep));
+  }
+
+  // Operações planejadas
+  const toAdd = diffInfo.newRemote.slice();
+  const toUpdate = diffInfo.modifiedRemote.slice();
+  const toRemove = diffInfo.removedRemote.slice();
+
+  console.log("[sync][incremental] planejamento:", {
+    add: toAdd.length,
+    update: toUpdate.length,
+    remove: toRemove.length,
+  });
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Sincronizando incrementalmente "${projectName}"...`,
+      cancellable: false,
+    },
+    async (progress) => {
+      const total = toAdd.length + toUpdate.length + toRemove.length;
+      let done = 0;
+      function step(msg: string) {
+        done++;
+        progress.report({ message: `${done}/${total} ${msg}` });
+      }
+
+      // Download de arquivos novos e modificados
+      const toFetch = [...new Set([...toAdd, ...toUpdate])];
+      for (const remoteFile of toFetch) {
+        try {
+          const data = await loadSingleRemote(remoteFile, system);
+          if (!data) {
+            step("falha download");
+            continue;
+          }
+          const localPath = remoteToLocal(remoteFile);
+          await fs.ensureDir(path.dirname(localPath));
+          await fs.writeFile(
+            localPath,
+            data.content,
+            data.isBinary ? undefined : ({ encoding: "utf8" } as any)
+          );
+          // Atualiza mapping garantindo estado limpo (unchanged)
+          await localFilesMappingManager.addOrUpdateFile(
+            localPath,
+            remoteFile,
+            false,
+            "unchanged"
+          );
+          const fileEntry = localFilesMappingManager.getFile(localPath);
+          if (fileEntry) {
+            (fileEntry as any).serverModified = data.modified;
+            // Ajusta lastModified para refletir momento do download como baseline
+            fileEntry.lastModified = new Date();
+            fileEntry.hasLocalChanges = false;
+            fileEntry.status = "unchanged";
+          }
+          step("arquivo atualizado");
+        } catch (err) {
+          console.warn(
+            "[sync][incremental] erro ao atualizar",
+            remoteFile,
+            err
+          );
+        }
+      }
+
+      // Remoção de arquivos ausentes remotamente
+      for (const remoteFile of toRemove) {
+        try {
+          const localPath = remoteToLocal(remoteFile);
+          if (await fs.pathExists(localPath)) {
+            await fs.remove(localPath);
+          }
+          // Remover do mapping (se existir)
+          const entry = localFilesMappingManager.getFile(localPath);
+          if (entry) await localFilesMappingManager.removeFile(localPath);
+          step("arquivo removido");
+        } catch (err) {
+          console.warn("[sync][incremental] erro ao remover", remoteFile, err);
+        }
+      }
+    }
+  );
+
+  // Atualiza baseline final
+  updateServerModifiedBaseline(remotePath).catch(() => {});
+  try {
+    await updateLegacyPathMapping(projectPath, remotePath, diffInfo);
+  } catch (err) {
+    console.warn(
+      "[sync][incremental] falha ao atualizar path-mapping legado",
+      err
+    );
+  }
+  vscode.window.showInformationMessage(
+    `Projeto "${projectName}" sincronizado incrementalmente.`
+  );
+  vscode.commands.executeCommand("miisync.refreshprojects");
+  vscode.commands.executeCommand("miisync.refreshlocalprojects");
+}
+
+// Carrega conteúdo de um arquivo remoto individual
+async function loadSingleRemote(
+  remotePath: string,
+  system: System
+): Promise<{
+  content: Buffer | string;
+  isBinary: boolean;
+  modified: Date;
+} | null> {
+  try {
+    // Serviço de binary exige caminho WEB completo; assumindo remotePath já nesse formato
+    const response = await (
+      await import("../miiservice/readfileservice")
+    ).readFileService.call(system, remotePath);
+    if (!response || (response as any).Rowsets?.FatalError) return null;
+    const rows = (response as any).Rowsets?.Rowset?.Row || [];
+    const payload = rows.find((r: any) => r.Name === "Payload");
+    const modifiedRow = rows.find((r: any) => r.Name === "Modified");
+    if (!payload) return null;
+    const value = Buffer.from(payload.Value, "base64");
+    const isBinary = !value
+      .toString("utf8")
+      .match(/^[\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]*$/); // heurística simples
+    return {
+      content: isBinary ? value : value.toString("utf8"),
+      isBinary,
+      modified: modifiedRow ? new Date(modifiedRow.Value) : new Date(),
+    };
+  } catch (err) {
+    console.warn("[sync][incremental] falha loadSingleRemote", remotePath, err);
+    return null;
+  }
+}
+
+// Atualiza o arquivo legado .miisync/path-mapping.json refletindo mudanças incrementais
+async function updateLegacyPathMapping(
+  projectPath: string,
+  remoteRoot: string,
+  diffInfo: RemoteDiffInfo
+) {
+  try {
+    const mappingFile = path.join(projectPath, ".miisync", "path-mapping.json");
+    if (!(await fs.pathExists(mappingFile))) return; // nada a fazer se legado não existe
+
+    const data = await fs.readJson(mappingFile);
+    if (!data.mappings) data.mappings = [];
+
+    // Índice rápido por remotePath
+    const byRemote = new Map<string, any>();
+    for (const m of data.mappings) {
+      if (m.remotePath) byRemote.set(m.remotePath.replace(/\\/g, "/"), m);
+    }
+
+    // Função util para normalizar
+    const normRoot = normalizeRemote(remoteRoot);
+    function toRel(remoteFile: string): string {
+      const rel =
+        remoteFile === normRoot
+          ? ""
+          : remoteFile.substring(normRoot.length + 1);
+      return rel.split("/").join(path.sep);
+    }
+
+    // Util para obter infos locais atuais (hash + mtime)
+    async function captureLocalMeta(remotePathFull: string) {
+      const rel = toRel(remotePathFull);
+      const localAbs = path.join(projectPath, rel);
+      try {
+        const exists = await fs.pathExists(localAbs);
+        if (!exists) return null;
+        const stats = await fs.stat(localAbs);
+        const content = await fs.readFile(localAbs);
+        const hash = require("crypto")
+          .createHash("sha256")
+          .update(content)
+          .digest("hex");
+        return { hash, mtime: stats.mtime.toISOString(), isBinary: false };
+      } catch {
+        return null;
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // ADICIONADOS (novos no remoto) => inserir com baseline limpa
+    for (const remoteFile of diffInfo.newRemote) {
+      if (byRemote.has(remoteFile)) continue;
+      const meta = await captureLocalMeta(remoteFile);
+      data.mappings.push({
+        localPath: toRel(remoteFile),
+        remotePath: remoteFile,
+        lastUpdated: Date.now(),
+        contentHash: meta?.hash,
+        serverModified: nowIso,
+        localModifiedAtDownload: meta?.mtime,
+      });
+    }
+
+    // MODIFICADOS (remoto mais novo) => atualizar baseline para novo conteúdo para que apareçam como não modificados
+    for (const remoteFile of diffInfo.modifiedRemote) {
+      const existing = byRemote.get(remoteFile);
+      if (existing) {
+        const meta = await captureLocalMeta(remoteFile);
+        existing.lastUpdated = Date.now();
+        if (meta?.hash) existing.contentHash = meta.hash;
+        if (meta?.mtime) existing.localModifiedAtDownload = meta.mtime;
+        existing.serverModified = nowIso;
+      }
+    }
+
+    // REMOVIDOS (retirar do mapping legado)
+    if (diffInfo.removedRemote.length > 0) {
+      const removedSet = new Set(diffInfo.removedRemote);
+      data.mappings = data.mappings.filter(
+        (m: any) => !removedSet.has(m.remotePath)
+      );
+    }
+
+    // Atualiza rootRemotePath se estiver vazio
+    if (!data.rootRemotePath) data.rootRemotePath = remoteRoot;
+    if (!data.rootLocalPath) data.rootLocalPath = projectPath;
+
+    // Criar backup anterior
+    try {
+      const backupDir = path.join(projectPath, ".miisync", "backup-mapping");
+      await fs.ensureDir(backupDir);
+      const backupName = "path-mapping." + Date.now() + ".json";
+      if (await fs.pathExists(mappingFile)) {
+        await fs.copy(mappingFile, path.join(backupDir, backupName));
+      }
+    } catch (bkErr) {
+      console.warn(
+        "[sync][incremental] não foi possível criar backup mapping legado",
+        bkErr
+      );
+    }
+
+    await fs.writeJson(mappingFile, data, { spaces: 2 });
+  } catch (err) {
+    console.warn("[sync][incremental] erro ao atualizar mapping legado", err);
   }
 }

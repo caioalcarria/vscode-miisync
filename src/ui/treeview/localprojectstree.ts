@@ -377,26 +377,26 @@ export class LocalProjectsTreeProvider
   private setupMappingSystemIntegration(): void {
     // Monitora mudanças no sistema de mapeamento de arquivos
     localFilesMappingManager.onDidChangeMappings((changedFiles) => {
-      console.log(
-        `🔄 Sistema de mapeamento atualizado: ${changedFiles.length} arquivo(s) alterados`
-      );
+      // console.log(
+      //   `🔄 Sistema de mapeamento atualizado: ${changedFiles.length} arquivo(s) alterados`
+      // );
 
       // Faz refresh da árvore quando o mapeamento muda
       this.scheduleRefresh("sistema de mapeamento atualizado");
     });
 
-    console.log("🔗 Integração com sistema de mapeamento JSON configurada");
+    //console.log("🔗 Integração com sistema de mapeamento JSON configurada");
   }
 
   /**
    * 🚀 SISTEMA DE AUTO-REFRESH INTELIGENTE
    */
   private setupAutoRefresh(): void {
-    console.log("🔄 Configurando sistema de auto-refresh inteligente...");
+    //console.log("🔄 Configurando sistema de auto-refresh inteligente...");
 
     // 1. Monitor de arquivos salvos (modificações)
     vscode.workspace.onDidSaveTextDocument((document) => {
-      console.log(`💾 Arquivo salvo: ${document.fileName}`);
+      //console.log(`💾 Arquivo salvo: ${document.fileName}`);
 
       // Dispara evento específico se é em um projeto MiiSync
       this.checkIfFileIsInProject(document.fileName);
@@ -406,19 +406,26 @@ export class LocalProjectsTreeProvider
 
     // 2. Monitor de arquivos criados
     vscode.workspace.onDidCreateFiles((event) => {
-      console.log(`📁 Arquivos criados: ${event.files.length}`);
+      // console.log(`📁 Arquivos criados: ${event.files.length}`);
       this.scheduleRefresh("arquivos criados");
     });
 
     // 3. Monitor de arquivos deletados
-    vscode.workspace.onDidDeleteFiles((event) => {
-      console.log(`🗑️ Arquivos deletados: ${event.files.length}`);
+    vscode.workspace.onDidDeleteFiles(async (event) => {
+      // console.log(`🗑️ Arquivos deletados: ${event.files.length}`);
+      for (const uri of event.files) {
+        try {
+          await localFilesMappingManager.removeFile(uri.fsPath);
+        } catch {
+          /* ignore */
+        }
+      }
       this.scheduleRefresh("arquivos deletados");
     });
 
     // 4. Monitor de mudanças de workspace
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      console.log("📂 Workspace folders mudaram");
+      // console.log("📂 Workspace folders mudaram");
       this.scheduleRefresh("workspace mudou");
     });
 
@@ -427,31 +434,31 @@ export class LocalProjectsTreeProvider
 
     // 6. Auto-refresh periódico (a cada 30 segundos)
     setInterval(() => {
-      console.log("⏰ Auto-refresh periódico");
+      // console.log("⏰ Auto-refresh periódico");
       this.scheduleRefresh("auto-refresh periódico");
     }, 30000);
 
     // 7. Monitor quando VS Code ganha foco (pode ter mudanças externas)
     vscode.window.onDidChangeWindowState((state) => {
       if (state.focused) {
-        console.log("👁️ VS Code ganhou foco - verificando mudanças");
+        // console.log("👁️ VS Code ganhou foco - verificando mudanças");
         this.scheduleRefresh("foco ganho");
       }
     });
 
     // 8. 🚀 NOVO: Monitor de eventos específicos de projetos
     projectEvents.onProjectDownloaded((event) => {
-      console.log(`🎉 Projeto baixado detectado: ${event.localPath}`);
+      // console.log(`🎉 Projeto baixado detectado: ${event.localPath}`);
       this.scheduleRefresh("projeto baixado");
     });
 
     projectEvents.onProjectModified((event) => {
-      console.log(`📝 Projeto modificado detectado: ${event.localPath}`);
+      // console.log(`📝 Projeto modificado detectado: ${event.localPath}`);
       this.scheduleRefresh("projeto modificado");
     });
 
     projectEvents.onProjectDeleted((event) => {
-      console.log(`🗑️ Projeto deletado detectado: ${event.localPath}`);
+      // console.log(`🗑️ Projeto deletado detectado: ${event.localPath}`);
       this.scheduleRefresh("projeto deletado");
     });
   }
@@ -546,7 +553,7 @@ export class LocalProjectsTreeProvider
     }
 
     this.refreshTimeout = setTimeout(() => {
-      console.log(`🔄 Executando refresh: ${reason}`);
+      //console.log(`🔄 Executando refresh: ${reason}`);
       this.refresh();
       this.refreshTimeout = null;
     }, 500); // 500ms de debounce
@@ -774,11 +781,7 @@ export class LocalProjectsTreeProvider
         (file) => file.localPath.startsWith(projectPath) && file.hasLocalChanges
       );
 
-      console.log(
-        `📁 Projeto ${path.basename(projectPath)}: ${
-          projectMappedFiles.length
-        } arquivos no mapeamento JSON`
-      );
+      // console.log(`📁 Projeto ${path.basename(projectPath)}: ${projectMappedFiles.length} arquivos no mapeamento JSON`);
 
       // Converte arquivos do novo sistema para o formato esperado
       for (const mappedFile of projectMappedFiles) {
@@ -880,36 +883,36 @@ export class LocalProjectsTreeProvider
             // Tem ambos: só considera modificado se HASH mudou
             wasModified = hashChanged;
             if (hashChanged) {
-              console.log(
-                `📝 Arquivo modificado (conteúdo): ${mapping.localPath}`
-              );
+              // console.log(
+              //   `📝 Arquivo modificado (conteúdo): ${mapping.localPath}`
+              // );
             } else if (dateChanged) {
-              console.log(
-                `⏰ Data mudou mas conteúdo igual: ${mapping.localPath} - IGNORANDO`
-              );
+              // console.log(
+              //   `⏰ Data mudou mas conteúdo igual: ${mapping.localPath} - IGNORANDO`
+              //);
             }
           } else if (mapping.contentHash) {
             // Só tem hash: verifica hash
             wasModified = hashChanged;
             if (hashChanged) {
-              console.log(
-                `📝 Arquivo modificado por hash: ${mapping.localPath}`
-              );
+              //console.log(
+              //  `📝 Arquivo modificado por hash: ${mapping.localPath}`
+              //);
             }
           } else if (mapping.localModifiedAtDownload) {
             // Só tem data: verifica data
             wasModified = dateChanged;
             if (dateChanged) {
-              console.log(
-                `📝 Arquivo modificado por data: ${mapping.localPath}`
-              );
+              //.log(
+              //   `📝 Arquivo modificado por data: ${mapping.localPath}`
+              //);
             }
           } else {
             // Não tem metadata: considera não modificado (evita falsos positivos)
             wasModified = false;
-            console.log(
-              `⚠️ Sem metadata para comparar: ${mapping.localPath} - ASSUMINDO NÃO MODIFICADO`
-            );
+            //  console.log(
+            //   `⚠️ Sem metadata para comparar: ${mapping.localPath} - ASSUMINDO NÃO MODIFICADO`
+            //  );
           }
 
           // Só adiciona se realmente foi modificado
@@ -1013,9 +1016,7 @@ export class LocalProjectsTreeProvider
     try {
       if (!mappingData.mappings) return;
 
-      console.log(
-        `📋 Registrando ${mappingData.mappings.length} arquivos do projeto no sistema de mapeamento...`
-      );
+      // console.log(`📋 Registrando ${mappingData.mappings.length} arquivos do projeto no sistema de mapeamento...`);
 
       for (const mapping of mappingData.mappings) {
         const localFilePath = path.join(projectPath, mapping.localPath);
@@ -1035,19 +1036,11 @@ export class LocalProjectsTreeProvider
             "unchanged"
           );
         } else {
-          console.log(
-            `🔄 Arquivo já existe no mapeamento: ${path.basename(
-              localFilePath
-            )}`
-          );
+          // console.log(`🔄 Arquivo já existe no mapeamento: ${path.basename(localFilePath)}`);
         }
       }
 
-      console.log(
-        `✅ Projeto registrado no sistema de mapeamento: ${path.basename(
-          projectPath
-        )}`
-      );
+      // console.log(`✅ Projeto registrado no sistema de mapeamento: ${path.basename(projectPath)}`);
     } catch (error) {
       console.error(
         "❌ Erro ao registrar projeto no sistema de mapeamento:",

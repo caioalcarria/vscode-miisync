@@ -31,7 +31,7 @@ export async function OnCommandCopyServerPath(uri: vscode.Uri): Promise<void> {
             { modal: false }
         );
 
-        console.log(`📋 Caminho do servidor copiado: ${remotePath}`);
+        //console.log(`📋 Caminho do servidor copiado: ${remotePath}`);
         
     } catch (error) {
         console.error("❌ Erro ao copiar caminho do servidor:", error);

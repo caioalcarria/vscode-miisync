@@ -32,9 +32,9 @@ class FileStatusDecorationProvider implements vscode.FileDecorationProvider {
   private setupMappingIntegration(): void {
     // Monitora mudanças no sistema de mapeamento de arquivos
     localFilesMappingManager.onDidChangeMappings((changedFiles) => {
-      console.log(
-        `🔄 Mapeamento atualizado para ${changedFiles.length} arquivo(s)`
-      );
+      // console.log(
+      //   `🔄 Mapeamento atualizado para ${changedFiles.length} arquivo(s)`
+      // );
 
       // Atualiza decorações para os arquivos alterados
       const uris = changedFiles.map((filePath) => vscode.Uri.file(filePath));
@@ -250,7 +250,7 @@ class FileStatusDecorationProvider implements vscode.FileDecorationProvider {
         true,
         "added"
       );
-      console.log(`📁 Arquivo criado (mapeado): ${path.basename(filePath)}`);
+      //console.log(`📁 Arquivo criado (mapeado): ${path.basename(filePath)}`);
       return; // O evento será disparado pelo sistema de mapeamento
     }
 

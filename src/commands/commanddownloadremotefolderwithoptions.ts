@@ -118,7 +118,7 @@ async function handleDuplicateProject(remotePath: string, originalName: string):
         return;
     }
 
-    console.log(`📋 Duplicando projeto como: ${newName}`);
+    //console.log(`📋 Duplicando projeto como: ${newName}`);
     const userConfig = await configManager.load();
     if (!userConfig) return;
     await DownloadRemoteFolderAsProject(remotePath, userConfig, configManager.CurrentSystem);

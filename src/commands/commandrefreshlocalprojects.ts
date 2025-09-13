@@ -7,7 +7,7 @@ import { localProjectsTree } from "../ui/treeview/localprojectstree";
 export async function OnCommandRefreshLocalProjects(): Promise<void> {
     try {
         localProjectsTree.refresh();
-        console.log("🔄 Lista de projetos locais atualizada");
+        //console.log("🔄 Lista de projetos locais atualizada");
     } catch (error) {
         console.error("❌ Erro ao atualizar projetos locais:", error);
         vscode.window.showErrorMessage("Erro ao atualizar lista de projetos locais.");

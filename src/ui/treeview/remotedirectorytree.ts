@@ -18,7 +18,7 @@ class RemoteDirectoryTree extends TreeDataProvider {
      * Força atualização imediata (uso público)
      */
     public forceRefresh(): void {
-        console.log('🔄 Force refresh do remote directory tree');
+        //console.log('🔄 Force refresh do remote directory tree');
         this.refreshDecorationsAndTree();
     }
 
@@ -28,14 +28,14 @@ class RemoteDirectoryTree extends TreeDataProvider {
     private setupProjectChangeListener(): void {
         // Escuta mudanças nos projetos locais
         localProjectsTree.onDidChangeTreeData(() => {
-            console.log('🔄 Projetos locais alterados - atualizando remote directory tree');
+            //console.log('🔄 Projetos locais alterados - atualizando remote directory tree');
             this.refreshWithDelay();
         });
         
         // Escuta eventos específicos de projeto usando VS Code EventEmitter
         const { projectEvents } = require('../../events/projectevents');
         projectEvents.onProjectDownloaded(() => {
-            console.log('📥 Projeto baixado - atualizando remote directory tree');
+            //console.log('📥 Projeto baixado - atualizando remote directory tree');
             this.refreshWithDelay();
         });
     }

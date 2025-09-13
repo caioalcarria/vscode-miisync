@@ -155,7 +155,7 @@ export class CentralizedChangeManager {
         return;
       }
 
-      console.log(`📁 Escaneando projeto MiiSync: ${dirPath}`);
+      //console.log(`📁 Escaneando projeto MiiSync: ${dirPath}`);
 
       // Escaneia apenas os arquivos que estão no mapeamento
       const mapping = await fs.readJson(miisyncFile);

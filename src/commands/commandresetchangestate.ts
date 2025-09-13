@@ -27,7 +27,7 @@ export async function OnCommandResetChangeState(): Promise<void> {
       vscode.window.showInformationMessage(
         "✅ Estado de mudanças resetado com sucesso!"
       );
-      console.log("🔄 Estado de mudanças foi resetado manualmente");
+      //console.log("🔄 Estado de mudanças foi resetado manualmente");
     }
   } catch (error) {
     console.error("❌ Erro ao resetar estado de mudanças:", error);

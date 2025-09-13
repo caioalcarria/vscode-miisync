@@ -52,7 +52,7 @@ async function updatePathMappingForNewFile(localFilePath: string, remotePath: st
                 await PathMappingManager.addMapping(rootPath, relativePath, remotePath, content);
                 
                 const fileName = path.basename(localFilePath);
-                console.log(`🔄 Mapeamento atualizado: ${fileName} → ${remotePath}`);
+                //console.log(`🔄 Mapeamento atualizado: ${fileName} → ${remotePath}`);
                 
                 window.showInformationMessage(
                     `🔄 Mapeamento atualizado: "${fileName}"`,

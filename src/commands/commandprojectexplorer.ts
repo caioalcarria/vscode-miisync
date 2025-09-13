@@ -7,7 +7,7 @@ import { projectExplorerTree, ProjectExplorerItem } from '../ui/treeview/project
  */
 export async function OnCommandRefreshProjectExplorer(): Promise<void> {
     try {
-        console.log('🔄 Refreshing Project Explorer');
+        //console.log('🔄 Refreshing Project Explorer');
         projectExplorerTree.refresh();
         vscode.window.showInformationMessage('Project Explorer refreshed');
     } catch (error) {

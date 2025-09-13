@@ -59,7 +59,7 @@ export async function StartAction(type: ActionType, { name, resource, system }: 
                 // Força refresh imediato E agenda outro em 2 segundos (para garantir)
                 localProjectsTree.refresh();
                 setTimeout(() => {
-                    console.log('🔄 Refresh de segurança após download');
+                   // console.log('🔄 Refresh de segurança após download');
                     localProjectsTree.refresh();
                 }, 2000);
             }

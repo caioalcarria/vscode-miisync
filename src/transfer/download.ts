@@ -199,7 +199,7 @@ export async function DownloadRemoteFolderAsProject(remoteFolderPath: string, us
     }
 
     const folderName = path.basename(remoteFolderPath);
-    console.log(`📁 Baixando como projeto: ${folderName} (${remoteFolderPath})`);
+    //console.log(`📁 Baixando como projeto: ${folderName} (${remoteFolderPath})`);
     
     const download = async (): Promise<ActionReturn> => {
         const workspaceFolder = GetCurrentWorkspaceFolder().fsPath;

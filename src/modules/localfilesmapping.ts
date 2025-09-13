@@ -94,11 +94,11 @@ export class LocalFilesMappingManager {
           };
         }
 
-        console.log(
-          `📋 Mapeamento de arquivos carregado: ${
-            Object.keys(this.mappingData.files).length
-          } arquivos`
-        );
+        // console.log(
+        //   `📋 Mapeamento de arquivos carregado: ${
+        //     Object.keys(this.mappingData.files).length
+        //   } arquivos`
+        // );
       } else {
         console.log("📋 Arquivo de mapeamento não encontrado, criando novo...");
         await this.saveMapping();
@@ -124,11 +124,11 @@ export class LocalFilesMappingManager {
       // Salvar arquivo
       await fs.writeJson(this.mappingFilePath, this.mappingData, { spaces: 2 });
 
-      console.log(
-        `💾 Mapeamento salvo: ${
-          Object.keys(this.mappingData.files).length
-        } arquivos`
-      );
+      // console.log(
+      //   `💾 Mapeamento salvo: ${
+      //     Object.keys(this.mappingData.files).length
+      //   } arquivos`
+      // );
     } catch (error) {
       console.error("❌ Erro ao salvar mapeamento de arquivos:", error);
     }

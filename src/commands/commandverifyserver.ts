@@ -26,7 +26,7 @@ async function updateProjectMetadata(project: { localPath: string; remoteLocatio
             throw new Error('Não foi possível carregar mapping do projeto');
         }
 
-        console.log(`🔄 Atualizando metadata de ${mappingConfig.mappings.length} arquivos...`);
+        //console.log(`🔄 Atualizando metadata de ${mappingConfig.mappings.length} arquivos...`);
         
         const currentSystem = configManager.CurrentSystem;
         if (!currentSystem) {
@@ -38,7 +38,7 @@ async function updateProjectMetadata(project: { localPath: string; remoteLocatio
         
         async function collectFiles(remotePath: string): Promise<void> {
             try {
-                console.log(`📁 Coletando de: ${remotePath}`);
+                //console.log(`📁 Coletando de: ${remotePath}`);
                 
                 // Lista arquivos do diretório atual
                 const serverFiles = await listFilesService.call(currentSystem, remotePath);
@@ -186,7 +186,7 @@ async function performServerVerification(project: LocalProject): Promise<ServerV
         const totalFiles = mappingConfig?.mappings.length || 0;
         
         if (filesWithoutMetadata > totalFiles * 0.8) { // Se mais de 80% não tem metadata
-            console.log(`🔄 Projeto parece ser de versão anterior - atualizando metadata...`);
+            //console.log(`🔄 Projeto parece ser de versão anterior - atualizando metadata...`);
             await updateProjectMetadata({ localPath: project.localPath, remoteLocation: project.remotePath });
             console.log(`✅ Metadata atualizada! Execute a verificação novamente.`);
             
@@ -604,7 +604,7 @@ async function performDetailedVerificationTraditional(
             const serverDirPath = path.dirname(remotePath).replace(/\\/g, '/');
             const serverFileName = path.basename(remotePath);
             
-            console.log(`📁 DEBUG: Listando diretório: ${serverDirPath}`);
+            //console.log(`📁 DEBUG: Listando diretório: ${serverDirPath}`);
             const serverDirResponse = await listFilesService.call(currentSystem, serverDirPath);
             
             let serverFileInfo = null;
@@ -860,7 +860,7 @@ async function scanServerDirectory(
     files: Map<string, ServerFileInfo>
 ): Promise<void> {
     try {
-        console.log(`📁 Escaneando diretório do servidor: "${currentPath}"`);
+        //console.log(`📁 Escaneando diretório do servidor: "${currentPath}"`);
         
         // 1. Lista arquivos do diretório atual
         const serverFiles = await listFilesService.call(system, currentPath);
@@ -895,7 +895,7 @@ async function scanServerDirectory(
         
         if (serverFolders && !IsFatalResponse(serverFolders)) {
             const folderItems = serverFolders?.Rowsets?.Rowset?.Row || [];
-            console.log(`📁 Encontradas ${folderItems.length} pastas em "${currentPath}"`);
+            //console.log(`📁 Encontradas ${folderItems.length} pastas em "${currentPath}"`);
             
             for (const folder of folderItems) {
                 const folderPath = folder.Path;
@@ -904,7 +904,7 @@ async function scanServerDirectory(
                 relativePath = relativePath.replace(/\\/g, '/'); // Converte \ para /
                 
                 if (relativePath) {
-                    console.log(`📁 Pasta servidor: "${relativePath}" (full: ${folderPath})`);
+                    //console.log(`📁 Pasta servidor: "${relativePath}" (full: ${folderPath})`);
                     // Adiciona a pasta como entrada
                     files.set(relativePath, {
                         path: folderPath,
@@ -964,7 +964,7 @@ async function scanLocalDirectory(
                     lastModified: (await fs.stat(itemPath)).mtime
                 });
                 
-                console.log(`📁 Pasta local: ${relativePath}`);
+                //console.log(`📁 Pasta local: ${relativePath}`);
                 // Recursão
                 await scanLocalDirectory(itemPath, basePath, files);
             } else {
@@ -1109,10 +1109,10 @@ async function calculateFileHash(filePath: string): Promise<string> {
         // Lê o arquivo como string UTF-8 para manter consistência com o servidor
         const content = await fs.readFile(filePath, 'utf8');
         const hash = crypto.createHash('sha256').update(content).digest('hex');
-        console.log(`📋 Hash calculado para ${path.basename(filePath)}: ${hash.substring(0, 8)}...`);
+        //console.log(`📋 Hash calculado para ${path.basename(filePath)}: ${hash.substring(0, 8)}...`);
         return hash;
     } catch (error) {
-        console.warn(`⚠️ Erro ao calcular hash de ${filePath}:`, error);
+       // console.warn(`⚠️ Erro ao calcular hash de ${filePath}:`, error);
         return '';
     }
 }
@@ -1209,7 +1209,7 @@ async function downloadProjectSilently(remotePath: string): Promise<{
         
         // Cria diretório temporário
         const tempDir = await fs.mkdtemp(path.join(require('os').tmpdir(), 'miisync-verify-'));
-        console.log(`📁 Diretório temporário: ${tempDir}`);
+       // console.log(`📁 Diretório temporário: ${tempDir}`);
         
         const currentSystem = configManager.CurrentSystem;
         const userConfig = configManager.SelfConfig;
