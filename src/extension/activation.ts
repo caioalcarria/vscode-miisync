@@ -31,6 +31,7 @@ import {
 } from "../commands/commandsession";
 import { OnCommandShowFileDiff } from "../commands/commandshowfilediff";
 import { OnCommandShowServerDifferences } from "../commands/commandshowserverdifferences";
+import { OnCommandShowSyncDifferences } from "../commands/commandsyncdiffdetails";
 import { OnCommandSyncProject } from "../commands/commandsyncproject";
 import {
   OnCommandDisableDownloadOnOpen,
@@ -208,6 +209,11 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
   );
   RegisterCommand("miisync.deleteproject", OnCommandDeleteProject, context);
   RegisterCommand("miisync.syncproject", OnCommandSyncProject, context);
+  RegisterCommand(
+    "miisync.showSyncDifferences",
+    OnCommandShowSyncDifferences,
+    context
+  );
 }
 
 // Variável global para o provider de configurações

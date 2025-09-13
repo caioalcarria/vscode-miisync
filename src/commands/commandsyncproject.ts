@@ -105,13 +105,23 @@ export async function OnCommandSyncProject(projectItem: any) {
       {
         modal: true,
         detail:
-          popupDetailLines.join("\n") + "\n\nEscolha o modo de sincronização.",
+          popupDetailLines.join("\n") + "\n\nEscolha o modo ou veja detalhes.",
       },
       "Incremental",
       "Completa",
+      "Detalhes",
       "Cancelar"
     );
     if (!confirmation || confirmation === "Cancelar") return;
+    if (confirmation === "Detalhes") {
+      vscode.commands.executeCommand("miisync.showSyncDifferences", {
+        projectPath,
+        projectName,
+        remotePath,
+        diffInfo,
+      });
+      return;
+    }
 
     // Verifica modificações locais
     const modified = await hasLocalModifications(projectPath);
@@ -247,6 +257,7 @@ interface RemoteDiffInfo {
   modifiedRemote: string[];
   newRemote: string[];
   removedRemote: string[];
+  remoteMeta?: Record<string, { modified?: string; size?: number }>;
 }
 
 function normalizeRemote(p: string): string {
@@ -269,6 +280,7 @@ async function collectRemoteDifferences(
     modifiedRemote: [],
     newRemote: [],
     removedRemote: [],
+    remoteMeta: {},
   };
   try {
     const system = configManager.CurrentSystem as System;
@@ -362,6 +374,15 @@ async function collectRemoteDifferences(
     const seenRemote = new Set<string>();
     const toleranceMs = 2000; // tolerância de 2s devido possíveis arredondamentos
     for (const rf of uniqueRemote) {
+      // Captura metadados (Modified e Size se existir no objeto)
+      try {
+        (result.remoteMeta as any)[rf.norm] = {
+          modified: rf.raw.Modified || undefined,
+          size: (rf.raw as any).Size ? Number((rf.raw as any).Size) : undefined,
+        };
+      } catch {
+        /* ignore */
+      }
       seenRemote.add(rf.norm);
       const mapped = mappingByRemote.get(rf.norm);
       if (!mapped) {
