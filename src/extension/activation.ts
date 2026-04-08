@@ -41,6 +41,14 @@ import {
 } from "../commands/commandtogglesync";
 import { OnCommandTransferBroad } from "../commands/commandtransferbroad";
 import { OnCommandTransferWorkspace } from "../commands/commandtransferworkspace";
+import {
+  OnCommandTrxDownloadFolderAsProject,
+  OnCommandTrxOpenFile,
+  OnCommandTrxRefresh,
+  OnCommandTrxSetRootPath,
+  OnCommandTrxUpload,
+  OnCommandTrxUploadWithBkp,
+} from "../commands/commandtrxexplorer";
 import { OnCommandUploadBroad } from "../commands/commanduploadbroad";
 import { OnCommandUploadModifiedFile } from "../commands/commanduploadmodifiedfile";
 import { commandUploadWithBkp } from "../commands/commanduploadwithbkp";
@@ -51,12 +59,14 @@ import { OnDidChangeActiveTextEditor } from "../events/changeactivettexteditor";
 import { onDidChangeConfiguration } from "../events/changeconfiguration";
 import { OnDidOpenTextDocument } from "../events/opentextdocument";
 import { OnDidSaveTextDocument } from "../events/savetextdocument";
+import { trxTempFiles } from "../modules/trxtempfiles";
 import { fileStatusDecorationProvider } from "../ui/decorations/filestatusdecorations";
 import { projectFolderDecorationProvider } from "../ui/decorations/projectfolderdecorations";
 import { remoteDirectoryDecorationProvider } from "../ui/decorations/remotedirectorydecorations";
 import { localProjectsTree } from "../ui/treeview/localprojectstree";
 import { projectsTree } from "../ui/treeview/projectsTree";
 import { remoteDirectoryTree } from "../ui/treeview/remotedirectorytree";
+import { trxDirectoryTree } from "../ui/treeview/trxexplorer";
 import transactionPropertiesVirtualDoc from "../ui/virtualdocument/transactionproperties";
 import { MiiSyncConfigWebViewProvider } from "../ui/webview/miisyncConfigWebViewProvider";
 
@@ -72,6 +82,19 @@ export function RegisterEvents({ subscriptions }: vscode.ExtensionContext) {
   );
   subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(onDidChangeConfiguration)
+  );
+  // Atualiza context key quando o editor ativo muda
+  subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      const isTrxTemp = editor
+        ? trxTempFiles.isTrxTempFile(editor.document.uri.fsPath)
+        : false;
+      vscode.commands.executeCommand(
+        "setContext",
+        "miisync.isTrxTempFile",
+        isTrxTemp
+      );
+    })
   );
 }
 
@@ -214,13 +237,25 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
     OnCommandShowSyncDifferences,
     context
   );
+
+  // TRX & Queries Explorer Commands
+  RegisterCommand("miisync.trxSetRootPath", OnCommandTrxSetRootPath, context);
+  RegisterCommand("miisync.trxRefresh", OnCommandTrxRefresh, context);
+  RegisterCommand("miisync.trxOpenFile", OnCommandTrxOpenFile, context);
+  RegisterCommand(
+    "miisync.trxDownloadFolderAsProject",
+    OnCommandTrxDownloadFolderAsProject,
+    context
+  );
+  RegisterCommand("miisync.trxUpload", OnCommandTrxUpload, context);
+  RegisterCommand("miisync.trxUploadWithBkp", OnCommandTrxUploadWithBkp, context);
 }
 
 // Variável global para o provider de configurações
 let configWebViewProvider: MiiSyncConfigWebViewProvider;
 
 export function activateTree(context: vscode.ExtensionContext) {
-  // Registra os tree data providers
+  // Registra os tree data providers — sidebar web
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider(
       "remotedirectory",
@@ -263,6 +298,11 @@ export function activateTree(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(
     vscode.window.registerFileDecorationProvider(fileStatusDecorationProvider)
+  );
+
+  // TRX & Queries Explorer — sidebar separada
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider("trxdirectory", trxDirectoryTree)
   );
 
   // Cria a TreeView para Local Projects e configura o badge

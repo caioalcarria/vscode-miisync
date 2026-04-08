@@ -5,6 +5,7 @@ import { IsFatalResponse } from "../../miiservice/abstract/filters";
 import { File, Folder } from "../../miiservice/abstract/responsetypes";
 import { listFilesService } from "../../miiservice/listfilesservice";
 import { listFoldersService } from "../../miiservice/listfoldersservice";
+import { loadMesFileService } from "../../miiservice/mesfileservice";
 import { readFileService } from "../../miiservice/readfileservice";
 import { GetRemotePath } from "../../modules/file";
 import { PathMappingManager } from "../../modules/pathmapping";
@@ -316,6 +317,40 @@ export async function DownloadComplexLimited(
             remotePath: remotePath,
           });
         }
+      }
+
+      // MES paths (MES/, non-WEB) use Mode=Load which returns raw content directly.
+      // WEB paths use Mode=LoadBinary&Class=Content which returns base64 in a Payload row.
+      if (!remotePath.startsWith("WEB/")) {
+        const rawContent = await loadMesFileService.call(system, remotePath);
+        if (aborted) return;
+        if (rawContent != null) {
+          await outputFile(localFilePath, rawContent, { encoding: "utf8" });
+
+          if (folder.isRemotePath && file && rootLocalPath) {
+            const relativePath = path.relative(rootLocalPath, localFilePath);
+            if (relativePath && !relativePath.startsWith("..")) {
+              const mappingIndex = pathMappings.findIndex(
+                (m) => m.localPath === relativePath
+              );
+              if (mappingIndex !== -1) {
+                const serverModified = file.Modified
+                  ? new Date(file.Modified)
+                  : new Date();
+                const stats = await import("fs-extra").then((fs) =>
+                  fs.stat(localFilePath)
+                );
+                (pathMappings[mappingIndex] as any).serverModified =
+                  serverModified.toISOString();
+                (pathMappings[mappingIndex] as any).localModifiedAtDownload =
+                  stats.mtime.toISOString();
+                (pathMappings[mappingIndex] as any).isBinary = false;
+                (pathMappings[mappingIndex] as any).fileContent = rawContent;
+              }
+            }
+          }
+        }
+        return;
       }
 
       const response = await readFileService.call(system, remotePath);

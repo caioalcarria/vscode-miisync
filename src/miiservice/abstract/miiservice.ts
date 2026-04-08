@@ -92,12 +92,17 @@ export abstract class Service {
     }
 
     protected parseXML(data: string, options?: Partial<X2jOptions>) {
-        options = options ? options : {
-            ignoreAttributes: false, isArray(tagName, jPath, isLeafNode, isAttribute) {
+        const defaults: Partial<X2jOptions> = {
+            ignoreAttributes: false,
+            isArray(tagName) {
                 return tagName == "Row";
             },
+            processEntities: { maxTotalExpansions: 10000 },
         };
-        const parser = new XMLParser(options);
+        const resolved = options
+            ? { processEntities: { maxTotalExpansions: 10000 }, ...options }
+            : defaults;
+        const parser = new XMLParser(resolved);
         return parser.parse(data);
     }
 

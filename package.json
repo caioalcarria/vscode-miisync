@@ -305,6 +305,48 @@
         "icon": "$(cloud-download)",
         "category": "mii",
         "enablement": "miisync.enabled"
+      },
+      {
+        "command": "miisync.trxSetRootPath",
+        "title": "Definir Caminho Raiz",
+        "icon": "$(folder-opened)",
+        "category": "mii-trx",
+        "enablement": "miisync.enabled"
+      },
+      {
+        "command": "miisync.trxRefresh",
+        "title": "Atualizar",
+        "icon": "$(refresh)",
+        "category": "mii-trx",
+        "enablement": "miisync.enabled"
+      },
+      {
+        "command": "miisync.trxOpenFile",
+        "title": "Abrir do Servidor",
+        "icon": "$(eye)",
+        "category": "mii-trx",
+        "enablement": "miisync.enabled && miisync.loggedin"
+      },
+      {
+        "command": "miisync.trxDownloadFolderAsProject",
+        "title": "Baixar como Projeto",
+        "icon": "$(arrow-down)",
+        "category": "mii-trx",
+        "enablement": "miisync.enabled && miisync.loggedin"
+      },
+      {
+        "command": "miisync.trxUpload",
+        "title": "Enviar para o Servidor",
+        "icon": "$(arrow-up)",
+        "category": "mii-trx",
+        "enablement": "miisync.enabled && miisync.loggedin && miisync.isTrxTempFile"
+      },
+      {
+        "command": "miisync.trxUploadWithBkp",
+        "title": "Enviar com Backup do Servidor",
+        "icon": "$(versions)",
+        "category": "mii-trx",
+        "enablement": "miisync.enabled && miisync.loggedin && miisync.isTrxTempFile"
       }
     ],
     "menus": {
@@ -379,6 +421,14 @@
         },
         {
           "command": "miisync.openrootconfig",
+          "when": "false"
+        },
+        {
+          "command": "miisync.trxOpenFile",
+          "when": "false"
+        },
+        {
+          "command": "miisync.trxDownloadFolderAsProject",
           "when": "false"
         }
       ],
@@ -476,6 +526,28 @@
           "command": "miisync.downloadtransactionproperties",
           "group": "mii",
           "when": "editorLangId == 'javascript' || editorLangId == 'typescript'"
+        },
+        {
+          "command": "miisync.trxUpload",
+          "group": "mii-trx@0",
+          "when": "miisync.isTrxTempFile"
+        },
+        {
+          "command": "miisync.trxUploadWithBkp",
+          "group": "mii-trx@1",
+          "when": "miisync.isTrxTempFile"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "miisync.trxUpload",
+          "group": "navigation@0",
+          "when": "miisync.isTrxTempFile"
+        },
+        {
+          "command": "miisync.trxUploadWithBkp",
+          "group": "navigation@1",
+          "when": "miisync.isTrxTempFile"
         }
       ],
       "view/title": [
@@ -493,6 +565,16 @@
           "command": "miisync.refreshlocalprojects",
           "when": "view == localprojects",
           "group": "navigation@0"
+        },
+        {
+          "command": "miisync.trxSetRootPath",
+          "when": "view == trxdirectory",
+          "group": "navigation@0"
+        },
+        {
+          "command": "miisync.trxRefresh",
+          "when": "view == trxdirectory",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -550,6 +632,16 @@
           "command": "miisync.downloadremotefile",
           "when": "view == remotedirectory && viewItem != folder && viewItem != file-loaded",
           "group": "inline@1"
+        },
+        {
+          "command": "miisync.trxOpenFile",
+          "when": "view == trxdirectory && (viewItem == trx-file || viewItem == trx-file-trx)",
+          "group": "inline@0"
+        },
+        {
+          "command": "miisync.trxDownloadFolderAsProject",
+          "when": "view == trxdirectory && viewItem == trx-folder",
+          "group": "inline@0"
         }
       ]
     },
@@ -564,6 +656,11 @@
           "id": "miisyncconfig",
           "title": "MiiSync Configurações",
           "icon": "$(settings-gear)"
+        },
+        {
+          "id": "miisynctrx",
+          "title": "MII TRX & Queries",
+          "icon": "$(database)"
         }
       ]
     },
@@ -595,6 +692,14 @@
           "type": "webview",
           "when": "miisync.enabled"
         }
+      ],
+      "miisynctrx": [
+        {
+          "id": "trxdirectory",
+          "name": "TRX & Queries",
+          "when": "miisync.enabled",
+          "icon": "$(database)"
+        }
       ]
     },
     "viewsWelcome": [
@@ -605,6 +710,10 @@
       {
         "view": "localprojects",
         "contents": "Bem-vindo ao MiiSync! Configure sua extensão para começar.\n\nUse a barra lateral ⚙️ MiiSync Configurações para definir suas configurações.\n\nPrecisa de ajuda? [📖 Ver Documentação](https://github.com/TaBayram/vscode-miisync)"
+      },
+      {
+        "view": "trxdirectory",
+        "contents": "Explore TRX, Queries e Runners do servidor MII.\n\n[Carregar Diretório (MES/)](command:miisync.trxRefresh)\n\nO caminho padrão é MES/. Para navegar por outra pasta, use o ícone de pasta no topo da aba.\n\n[Definir Caminho Raiz](command:miisync.trxSetRootPath)"
       }
     ],
     "jsonValidation": [
