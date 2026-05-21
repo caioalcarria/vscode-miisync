@@ -43,6 +43,7 @@ export interface LocalProject {
   name: string;
   localPath: string;
   remotePath: string;
+  projectCategory: ProjectCategory;
   downloadedAt: Date;
   modifiedFiles: ModifiedFile[];
   serverVerification?: ServerVerification;
@@ -84,10 +85,29 @@ export interface ModifiedFile {
   originalHash?: string; // Hash do conteúdo original para comparação
 }
 
+export type ProjectCategory = 'web' | 'catalog';
+
+/** Detecta se um segmento de path é exatamente "WEB" (não "WEBAPP", "WEBSERVICE", etc.) */
+function isWebRemotePath(remotePath: string): boolean {
+  return /(?:^|\/)WEB(?:\/|$)/.test(remotePath);
+}
+
+/** Determina a categoria de um projeto a partir dos dados do mapping.
+ *  Verifica rootRemotePath primeiro; se inconclusivo, examina os remotePaths
+ *  dos arquivos individuais para detectar "/WEB/" em qualquer um deles. */
+function detectProjectCategory(mappingData: any): ProjectCategory {
+  if (isWebRemotePath(mappingData.rootRemotePath || '')) return 'web';
+  const mappings: any[] = mappingData.mappings || [];
+  if (mappings.some((m) => isWebRemotePath(m.remotePath || ''))) return 'web';
+  return 'catalog';
+}
+
 /**
- * Item da árvore que pode ser um projeto, arquivo modificado ou diferença do servidor
+ * Item da árvore que pode ser uma categoria, projeto, arquivo modificado ou diferença do servidor
  */
 export class LocalProjectTreeItem extends vscode.TreeItem {
+  public categoryType?: ProjectCategory;
+
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
@@ -108,6 +128,28 @@ export class LocalProjectTreeItem extends vscode.TreeItem {
     } else if (isServerDiffSection) {
       this.setupServerDiffSection();
     }
+  }
+
+  static forCategory(
+    category: ProjectCategory,
+    projectCount: number,
+    modifiedCount: number
+  ): LocalProjectTreeItem {
+    const isWeb = category === 'web';
+    const item = new LocalProjectTreeItem(
+      isWeb ? 'Web' : 'Catalog — TRX & Queries',
+      vscode.TreeItemCollapsibleState.Expanded
+    );
+    item.categoryType = category;
+    item.description = modifiedCount > 0
+      ? `${projectCount} projeto(s) · ${modifiedCount} modificação(s)`
+      : `${projectCount} projeto(s)`;
+    item.iconPath = new vscode.ThemeIcon(
+      isWeb ? 'globe' : 'database',
+      new vscode.ThemeColor(isWeb ? 'charts.blue' : 'charts.purple')
+    );
+    item.contextValue = 'project-category';
+    return item;
   }
 
   private setupProjectItem(project: LocalProject): void {
@@ -568,27 +610,47 @@ export class LocalProjectsTreeProvider
     return element;
   }
 
+  private projectsForCategory(category: ProjectCategory): LocalProject[] {
+    return this.projects.filter((p) => p.projectCategory === category);
+  }
+
+  private makeProjectItem(project: LocalProject): LocalProjectTreeItem {
+    const hasContent =
+      project.modifiedFiles.length > 0 ||
+      (project.serverVerification?.differences.length || 0) > 0;
+    return new LocalProjectTreeItem(
+      project.name,
+      hasContent
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.Collapsed,
+      true,
+      project
+    );
+  }
+
   getChildren(
     element?: LocalProjectTreeItem
   ): Thenable<LocalProjectTreeItem[]> {
     if (!element) {
-      // Retorna os projetos raiz
-      return Promise.resolve(
-        this.projects.map((project) => {
-          const hasContent =
-            project.modifiedFiles.length > 0 ||
-            (project.serverVerification?.differences.length || 0) > 0;
+      const webProjects = this.projectsForCategory('web');
+      const catalogProjects = this.projectsForCategory('catalog');
+      const categories: LocalProjectTreeItem[] = [];
 
-          return new LocalProjectTreeItem(
-            project.name,
-            hasContent
-              ? vscode.TreeItemCollapsibleState.Expanded
-              : vscode.TreeItemCollapsibleState.None,
-            true,
-            project
-          );
-        })
+      if (webProjects.length > 0) {
+        const mods = webProjects.reduce((t, p) => t + p.modifiedFiles.length, 0);
+        categories.push(LocalProjectTreeItem.forCategory('web', webProjects.length, mods));
+      }
+      if (catalogProjects.length > 0) {
+        const mods = catalogProjects.reduce((t, p) => t + p.modifiedFiles.length, 0);
+        categories.push(LocalProjectTreeItem.forCategory('catalog', catalogProjects.length, mods));
+      }
+      return Promise.resolve(categories);
+
+    } else if (element.categoryType) {
+      return Promise.resolve(
+        this.projectsForCategory(element.categoryType).map((p) => this.makeProjectItem(p))
       );
+
     } else if (element.isProject && element.project) {
       // Retorna os filhos do projeto: arquivos modificados + diferenças do servidor
       const children: LocalProjectTreeItem[] = [];
@@ -757,6 +819,7 @@ export class LocalProjectsTreeProvider
         name: projectName,
         localPath: projectPath,
         remotePath: remotePath,
+        projectCategory: detectProjectCategory(mappingData),
         downloadedAt: stats.birthtime || stats.mtime,
         modifiedFiles: modifiedFiles,
       };

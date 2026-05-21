@@ -27,33 +27,44 @@ class LoadMesFileService extends Service {
 
 /**
  * Saves a MES file (transaction, query template, etc.) as raw text content.
- * Uses Mode=SaveBinary without Class=Content — the Class=Content variant is
- * reserved for WEB-directory files.
+ * Uses Mode=Save with all params in the POST body — this is the catalog save
+ * pattern in MII (distinct from SaveBinary+Class=Content which targets the WEB area).
  */
 class SaveMesFileService extends Service {
     readonly name = 'Save MES File';
-    readonly mode = 'XMII/Catalog?Mode=SaveBinary';
+    readonly mode = 'XMII/Catalog';
 
     async call(request: Request, filePath: string, content: string): Promise<boolean> {
-        const url = this.get(request, filePath);
-        const base64 = encodeURIComponent(Buffer.from(content).toString('base64'));
-        const body = 'Content=' + base64;
-        const { value, isError } = await this.fetch(new URL(url), { body });
+        const url = new URL(this.generateURL(request));
+        const body = [
+            'Mode=Save',
+            `ObjectName=${encodeURIComponent(filePath)}`,
+            `Content=${encodeURIComponent(content)}`,
+            'Content-Type=text/xml',
+            'TemporaryFile=false',
+        ].join('&');
+        const { value, isError } = await this.fetch(url, { body });
         if (isError || !value) return false;
         try {
             const parsed = this.parseXML(value as string);
-            return parsed && !('FatalError' in (parsed?.Rowsets ?? {}));
-        } catch {
+            const fatalError = parsed?.Rowsets?.FatalError;
+            if (fatalError) {
+                console.error('[saveMesFileService] FatalError:', fatalError);
+                return false;
+            }
+            return true;
+        } catch (e) {
+            console.error('[saveMesFileService] parse error:', e, 'raw:', String(value).slice(0, 300));
             return false;
         }
     }
 
-    get(server: MIIServer, filePath: string): string {
-        return this.generateURL(server) + `&${this.generateParams(filePath)}&__=${Date.now()}`;
+    get(server: MIIServer, _filePath?: string): string {
+        return this.generateURL(server);
     }
 
-    protected generateParams(file: string): string {
-        return 'ObjectName=' + file;
+    protected generateParams(): string {
+        return '';
     }
 }
 

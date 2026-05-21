@@ -213,9 +213,7 @@ export async function DownloadComplexLimited(
           if (aborted) return;
           if (!folders || IsFatalResponse(folders)) return;
           mainFolder.folders =
-            folders?.Rowsets?.Rowset?.Row?.filter(
-              (cFolder) => cFolder.IsWebDir
-            ).map((cFolder) => {
+            folders?.Rowsets?.Rowset?.Row?.map((cFolder) => {
               return { folder: cFolder, path: null, files: [], folders: [] };
             }) || [];
 
@@ -292,7 +290,7 @@ export async function DownloadComplexLimited(
     try {
       const localFilePath = sanitizeWindowsPath(filePath || getPath(file));
       const remotePath = file
-        ? file.FilePath + "/" + file.ObjectName
+        ? (file.FilePath + "/" + file.ObjectName).replace(/\/+/g, "/")
         : GetRemotePath(filePath, userConfig);
 
       // Coleta mapeamento para download de diretório remoto
@@ -319,9 +317,9 @@ export async function DownloadComplexLimited(
         }
       }
 
-      // MES paths (MES/, non-WEB) use Mode=Load which returns raw content directly.
-      // WEB paths use Mode=LoadBinary&Class=Content which returns base64 in a Payload row.
-      if (!remotePath.startsWith("WEB/")) {
+      // Catalog paths (no /WEB/ segment) use Mode=Load — returns raw content directly.
+      // Web content paths (contain /WEB/) use Mode=LoadBinary&Class=Content — returns base64 Payload.
+      if (!remotePath.includes("/WEB/")) {
         const rawContent = await loadMesFileService.call(system, remotePath);
         if (aborted) return;
         if (rawContent != null) {

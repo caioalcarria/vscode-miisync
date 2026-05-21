@@ -2,27 +2,55 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
+export type ProjectCategory = 'web' | 'catalog';
+
 export class ProjectItem extends vscode.TreeItem {
     constructor(
         public readonly label: string,
-        public readonly projectPath: string,
+        public readonly projectPath: string | null,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly contextValue: string = 'project'
+        public readonly contextValue: string = 'project',
+        public readonly category: ProjectCategory = 'web',
+        public readonly isCategory: boolean = false
     ) {
         super(label, collapsibleState);
+
+        if (isCategory) {
+            const isWeb = category === 'web';
+            this.iconPath = new vscode.ThemeIcon(
+                isWeb ? 'globe' : 'database',
+                new vscode.ThemeColor(isWeb ? 'charts.blue' : 'charts.purple')
+            );
+            this.contextValue = 'project-category';
+            return;
+        }
+
         this.tooltip = projectPath;
         this.description = path.basename(path.dirname(projectPath));
         this.resourceUri = vscode.Uri.file(projectPath);
-        
-        // Ícone para projetos
-        this.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor('charts.blue'));
-        
-        // Comando para abrir o projeto
+        this.iconPath = new vscode.ThemeIcon(
+            'folder',
+            new vscode.ThemeColor(category === 'web' ? 'charts.blue' : 'charts.purple')
+        );
         this.command = {
             command: 'miisync.openproject',
             title: 'Abrir Projeto',
-            arguments: [this.projectPath]
+            arguments: [projectPath]
         };
+    }
+
+    static forCategory(category: ProjectCategory, projectCount: number): ProjectItem {
+        const isWeb = category === 'web';
+        const item = new ProjectItem(
+            isWeb ? 'Web' : 'Catalog — TRX & Queries',
+            null,
+            vscode.TreeItemCollapsibleState.Expanded,
+            'project-category',
+            category,
+            true
+        );
+        item.description = `${projectCount} projeto(s)`;
+        return item;
     }
 }
 
@@ -66,7 +94,17 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<ProjectItem
 
     getChildren(element?: ProjectItem): Thenable<ProjectItem[]> {
         if (!element) {
-            return Promise.resolve(this.projects);
+            const webProjects = this.projects.filter(p => p.category === 'web');
+            const catalogProjects = this.projects.filter(p => p.category === 'catalog');
+            const categories: ProjectItem[] = [];
+            if (webProjects.length > 0)
+                categories.push(ProjectItem.forCategory('web', webProjects.length));
+            if (catalogProjects.length > 0)
+                categories.push(ProjectItem.forCategory('catalog', catalogProjects.length));
+            return Promise.resolve(categories);
+        }
+        if (element.isCategory) {
+            return Promise.resolve(this.projects.filter(p => p.category === element.category));
         }
         return Promise.resolve([]);
     }
@@ -86,22 +124,39 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<ProjectItem
         });
     }
 
+    private isWebSegment(p: string): boolean {
+        return /(?:^|\/)WEB(?:\/|$)/.test(p);
+    }
+
+    private getProjectCategory(folderPath: string): ProjectCategory {
+        try {
+            const mappingFile = path.join(folderPath, '.miisync', 'path-mapping.json');
+            if (fs.existsSync(mappingFile)) {
+                const mapping = JSON.parse(fs.readFileSync(mappingFile, 'utf8'));
+                if (this.isWebSegment(mapping.rootRemotePath || '')) return 'web';
+                const mappings: any[] = mapping.mappings || [];
+                if (mappings.some((m) => this.isWebSegment(m.remotePath || ''))) return 'web';
+                return 'catalog';
+            }
+        } catch {}
+        return 'catalog';
+    }
+
     private scanWorkspaceForProjects(workspacePath: string): void {
         try {
             const items = fs.readdirSync(workspacePath, { withFileTypes: true });
-            
             items.forEach(item => {
                 if (item.isDirectory()) {
                     const projectPath = path.join(workspacePath, item.name);
-                    
-                    // USAR EXATAMENTE A MESMA LÓGICA DAS DECORAÇÕES
                     if (this.isMiiSyncProject(projectPath)) {
-                        const projectItem = new ProjectItem(
+                        const category = this.getProjectCategory(projectPath);
+                        this.projects.push(new ProjectItem(
                             item.name,
                             projectPath,
-                            vscode.TreeItemCollapsibleState.None
-                        );
-                        this.projects.push(projectItem);
+                            vscode.TreeItemCollapsibleState.None,
+                            'project',
+                            category
+                        ));
                     }
                 }
             });

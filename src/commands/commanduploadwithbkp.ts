@@ -6,6 +6,7 @@ import logger from '../ui/logger';
 import { configManager } from "../modules/config";
 import { UploadFile } from "../transfer/upload";
 import { GetRemotePathWithMapping } from "../modules/file";
+import { loadMesFileService } from "../miiservice/mesfileservice";
 import { readFileService } from "../miiservice/readfileservice";
 import { IsFatalResponse } from "../miiservice/abstract/filters";
 
@@ -161,30 +162,30 @@ export async function commandUploadWithBkp(fileUri?: vscode.Uri) {
  */
 async function downloadServerFileToPath(remotePath: string, localPath: string, userConfig: any, system: any): Promise<void> {
     try {
-        // Usa o serviço readFile para baixar o conteúdo do servidor
-        const response = await readFileService.call(system, remotePath);
-        
-        if (!response) {
-            throw new Error(`Arquivo não encontrado no servidor: ${remotePath}`);
+        const isCatalogFile = !remotePath.includes('/WEB/');
+
+        if (isCatalogFile) {
+            const content = await loadMesFileService.call(system, remotePath);
+            if (content == null) {
+                throw new Error(`Arquivo não encontrado no servidor: ${remotePath}`);
+            }
+            fs.writeFileSync(localPath, content, 'utf8');
+        } else {
+            const response = await readFileService.call(system, remotePath);
+            if (!response) {
+                throw new Error(`Arquivo não encontrado no servidor: ${remotePath}`);
+            }
+            if (IsFatalResponse(response)) {
+                throw new Error(`Arquivo não encontrado no servidor: ${remotePath}`);
+            }
+            const payload = response?.Rowsets?.Rowset?.Row?.find((row) => row.Name === "Payload");
+            if (!payload) {
+                throw new Error(`Conteúdo do arquivo não encontrado: ${remotePath}`);
+            }
+            const fileContent = Buffer.from(payload.Value, 'base64').toString('utf8');
+            fs.writeFileSync(localPath, fileContent, 'utf8');
         }
 
-        // Verifica se houve erro fatal
-        if (IsFatalResponse(response)) {
-            throw new Error(`Arquivo não encontrado no servidor: ${remotePath}`);
-        }
-
-        // Busca o payload do arquivo
-        const payload = response?.Rowsets?.Rowset?.Row?.find((row) => row.Name === "Payload");
-        if (!payload) {
-            throw new Error(`Conteúdo do arquivo não encontrado: ${remotePath}`);
-        }
-
-        // Decodifica o conteúdo base64
-        const fileContent = Buffer.from(payload.Value, 'base64').toString('utf8');
-
-        // Salva o conteúdo no arquivo local
-        fs.writeFileSync(localPath, fileContent, 'utf8');
-        
         logger.log(`Arquivo baixado com sucesso: ${remotePath} -> ${localPath}`);
     } catch (error) {
         logger.log(`Erro ao baixar arquivo do servidor: ${error}`);

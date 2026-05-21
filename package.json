@@ -656,11 +656,6 @@
           "id": "miisyncconfig",
           "title": "MiiSync Configurações",
           "icon": "$(settings-gear)"
-        },
-        {
-          "id": "miisynctrx",
-          "title": "MII TRX & Queries",
-          "icon": "$(database)"
         }
       ]
     },
@@ -683,6 +678,13 @@
           "name": "Projects",
           "when": "miisync.enabled",
           "icon": "$(folder-library)"
+        },
+        {
+          "id": "trxdirectory",
+          "name": "TRX & Queries",
+          "when": "miisync.enabled",
+          "icon": "$(database)",
+          "visibility": "collapsed"
         }
       ],
       "miisyncconfig": [
@@ -691,14 +693,6 @@
           "name": "Configurações",
           "type": "webview",
           "when": "miisync.enabled"
-        }
-      ],
-      "miisynctrx": [
-        {
-          "id": "trxdirectory",
-          "name": "TRX & Queries",
-          "when": "miisync.enabled",
-          "icon": "$(database)"
         }
       ]
     },
@@ -713,7 +707,7 @@
       },
       {
         "view": "trxdirectory",
-        "contents": "Explore TRX, Queries e Runners do servidor MII.\n\n[Carregar Diretório (MES/)](command:miisync.trxRefresh)\n\nO caminho padrão é MES/. Para navegar por outra pasta, use o ícone de pasta no topo da aba.\n\n[Definir Caminho Raiz](command:miisync.trxSetRootPath)"
+        "contents": "Explore TRX, Queries e Runners do servidor MII.\n\n[Carregar Diretório Raiz](command:miisync.trxRefresh)\n\nPara navegar por uma pasta específica, use o ícone de pasta no topo da aba.\n\n[Definir Caminho Raiz](command:miisync.trxSetRootPath)"
       }
     ],
     "jsonValidation": [

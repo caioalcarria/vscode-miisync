@@ -12,12 +12,12 @@ export async function OnCommandTrxSetRootPath() {
     const current = trxDirectoryTree.getRootPath();
     const input = await vscode.window.showInputBox({
         title: 'TRX & Queries — Caminho Raiz',
-        prompt: 'Digite o caminho da pasta raiz no servidor',
+        prompt: 'Digite o caminho da pasta raiz no servidor (vazio = raiz)',
         value: current,
-        placeHolder: 'MES'
+        placeHolder: '/'
     });
     if (input !== undefined) {
-        trxDirectoryTree.setRootPath(input.trim() || 'MES');
+        trxDirectoryTree.setRootPath(input.trim());
     }
 }
 

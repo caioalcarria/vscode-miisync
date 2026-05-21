@@ -52,20 +52,12 @@ export async function GetRemotePathWithMapping(
   userConfig: UserConfig,
   addWeb = true
 ): Promise<string> {
-  // Primeiro tenta usar o mapeamento de caminhos se disponível
-  const mappedPath = await PathMappingManager.getRemotePathFromMapping(
-    filePath
-  );
+  const mappedPath = await PathMappingManager.getRemotePathFromMapping(filePath);
   if (mappedPath) {
-    // Usa exatamente o caminho do mapeamento, ignorando as configurações
-    // Remove /WEB se já estiver presente e addWeb for true para evitar duplicação
-    let finalPath = mappedPath;
-    if (addWeb && !finalPath.includes("/WEB")) {
-      finalPath = InsertWeb(finalPath);
-    } else if (!addWeb && finalPath.includes("/WEB")) {
-      finalPath = RemoveWeb(finalPath);
-    }
-    return finalPath;
+    // The mapped path is the authoritative remote path — return it as-is.
+    // Do NOT apply InsertWeb: catalog paths (TRX, queries) must not have /WEB/,
+    // and web content paths already have /WEB/ stored in the mapping.
+    return mappedPath;
   }
 
   // Fallback para o método original baseado na configuração
