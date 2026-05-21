@@ -41,7 +41,9 @@ export class TrxItem extends vscode.TreeItem {
     static fromFile(file: File): TrxItem {
         const ext = file.ObjectName.split('.').pop()?.toLowerCase() || '';
         const contextValue = ext === 'trx' ? 'trx-file-trx' : 'trx-file';
-        const remotePath = file.FilePath + '/' + file.ObjectName;
+        // DcSpecificPath is the actual catalog path (e.g. MES/Folder/File.trx).
+        // FilePath may contain a web-accessible path which would upload to the wrong place.
+        const remotePath = file.DcSpecificPath || (file.FilePath + '/' + file.ObjectName);
         const item = new TrxItem(
             file.ObjectName,
             vscode.TreeItemCollapsibleState.None,

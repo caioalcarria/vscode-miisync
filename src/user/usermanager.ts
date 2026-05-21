@@ -4,6 +4,7 @@ import { settingsManager } from "../extension/settings";
 import { System } from "../extension/system";
 import { logInService } from "../miiservice/loginservice";
 import { logOutService } from "../miiservice/logoutservice";
+import { actionCatalog } from "../modules/actioncatalog";
 import { configManager } from "../modules/config";
 import { SetContextValue, ShowInputBox } from "../modules/vscode";
 import logger from "../ui/logger";
@@ -130,6 +131,8 @@ class UserManager {
             logger.info("Logged in succesfully for " + this.system.name + ".(n)");
             this.session.haveCookies(response);
             this.IsLoggedin = true;
+            // Load catalog after a delay so login cookies settle first
+            setTimeout(() => actionCatalog.loadFromServer(this.system), 1500);
             return true;
         }
         else {

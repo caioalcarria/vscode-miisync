@@ -67,6 +67,7 @@ import { localProjectsTree } from "../ui/treeview/localprojectstree";
 import { projectsTree } from "../ui/treeview/projectsTree";
 import { remoteDirectoryTree } from "../ui/treeview/remotedirectorytree";
 import { trxDirectoryTree } from "../ui/treeview/trxexplorer";
+import { TrxViewerProvider } from "../ui/trxviewer/trxViewerProvider";
 import transactionPropertiesVirtualDoc from "../ui/virtualdocument/transactionproperties";
 import { MiiSyncConfigWebViewProvider } from "../ui/webview/miisyncConfigWebViewProvider";
 
@@ -255,6 +256,9 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
 let configWebViewProvider: MiiSyncConfigWebViewProvider;
 
 export function activateTree(context: vscode.ExtensionContext) {
+  // Registra o custom editor para arquivos .trx
+  context.subscriptions.push(TrxViewerProvider.register(context));
+
   // Registra os tree data providers — sidebar web
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider(

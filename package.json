@@ -884,6 +884,16 @@
         }
       }
     ],
+    "customEditors": [
+      {
+        "viewType": "miisync.trxViewer",
+        "displayName": "MII TRX Viewer",
+        "selector": [
+          { "filenamePattern": "*.trx" }
+        ],
+        "priority": "default"
+      }
+    ],
     "icons": {
       "miisync-details": {
         "description": "MII Sync Details",
