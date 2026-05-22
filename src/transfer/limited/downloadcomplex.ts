@@ -52,7 +52,29 @@ export async function DownloadComplexLimited(
   const remotePathRoot = folder.isRemotePath
     ? folder.path
     : GetRemotePath(folder.path, userConfig);
-  const folderExists = await DoesFolderExist(remotePathRoot, system);
+
+  // Mode=Exists&Class=Content only works for WEB-area paths.
+  // For catalog paths (no /WEB/ segment), verify existence via listFoldersService.
+  const isWebPath = /(?:^|\/)WEB(?:\/|$)/.test(remotePathRoot);
+  let folderExists: boolean;
+  if (isWebPath) {
+    folderExists = await DoesFolderExist(remotePathRoot, system);
+  } else {
+    const parentPath = remotePathRoot.includes('/')
+      ? remotePathRoot.slice(0, remotePathRoot.lastIndexOf('/'))
+      : '';
+    const folderName = remotePathRoot.includes('/')
+      ? remotePathRoot.slice(remotePathRoot.lastIndexOf('/') + 1)
+      : remotePathRoot;
+    const resp = await listFoldersService.call(system, parentPath);
+    folderExists =
+      resp != null &&
+      !IsFatalResponse(resp) &&
+      (resp?.Rowsets?.Rowset?.Row?.some(
+        (f: Folder) => f.FolderName === folderName || f.Path === remotePathRoot
+      ) ?? false);
+  }
+
   if (!folderExists) {
     logger.error("Folder doesn't exist.");
     return { aborted: true };

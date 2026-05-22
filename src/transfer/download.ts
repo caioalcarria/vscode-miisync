@@ -118,7 +118,8 @@ async function AskRemoteDownloadPathOptions(remoteObjectPath: string, { remotePa
 }
 
 export async function DownloadRemoteFolder(remoteFolderPath: string, userConfig: UserConfig, system: System) {
-    if (!await Validate(userConfig, { system })) {
+    // Skip project existence check for explicit remote paths — DoesProjectExist only works for WEB projects.
+    if (!await Validate(userConfig, { system }, { project: false })) {
         return false;
     }
     const chosenfolderPath = await AskRemoteDownloadPathOptions(remoteFolderPath, userConfig);
@@ -194,7 +195,9 @@ export async function DownloadContextDirectory(userConfig: UserConfig, system: S
  * 🚀 NOVA FUNÇÃO: Baixa pasta remota diretamente como projeto (sem perguntar onde)
  */
 export async function DownloadRemoteFolderAsProject(remoteFolderPath: string, userConfig: UserConfig, system: System) {
-    if (!await Validate(userConfig, { system })) {
+    // Skip project existence check — remoteFolderPath is an explicit catalog/web path
+    // selected by the user; DoesProjectExist only works for WEB-type projects.
+    if (!await Validate(userConfig, { system }, { project: false })) {
         return false;
     }
 
