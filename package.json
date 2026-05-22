@@ -748,6 +748,18 @@
             "default": true,
             "description": "Should the extension see if the currently opened file is different from the remote file and show a notification if it is?",
             "order": 2
+          },
+          "miisync.settings.gitCommitOnUpload": {
+            "type": "string",
+            "enum": ["disabled", "ask", "always"],
+            "enumDescriptions": [
+              "Never create git commits after upload.",
+              "Ask each time whether to create a git commit after upload.",
+              "Always create a git commit automatically after a successful upload."
+            ],
+            "default": "ask",
+            "description": "Controls whether MiiSync creates a git commit after a successful file upload.",
+            "order": 3
           }
         }
       },

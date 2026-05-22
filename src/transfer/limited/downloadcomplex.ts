@@ -8,6 +8,7 @@ import { listFoldersService } from "../../miiservice/listfoldersservice";
 import { loadMesFileService } from "../../miiservice/mesfileservice";
 import { readFileService } from "../../miiservice/readfileservice";
 import { GetRemotePath } from "../../modules/file";
+import { gitManager } from "../../modules/gitmanager";
 import { PathMappingManager } from "../../modules/pathmapping";
 import { ComplexFolder } from "../../types/miisync";
 import logger from "../../ui/logger";
@@ -101,22 +102,12 @@ export async function DownloadComplexLimited(
           pathMappings.map(async (m: any) => {
             let contentHash: string | undefined;
 
-            // Se temos o conteúdo, cria backup e calcula hash
+            // Calcula hash do conteúdo para baseline de modificação
             if (m.fileContent) {
               try {
-                await PathMappingManager.createFileBackup(
-                  rootLocalPath,
-                  m.localPath,
-                  m.fileContent
-                );
-                contentHash = PathMappingManager.calculateContentHash(
-                  m.fileContent
-                );
+                contentHash = PathMappingManager.calculateContentHash(m.fileContent);
               } catch (error) {
-                console.error(
-                  "❌ Erro ao processar arquivo para mapeamento:",
-                  error
-                );
+                console.error("❌ Erro ao calcular hash para mapeamento:", error);
               }
             }
 
@@ -147,6 +138,16 @@ export async function DownloadComplexLimited(
     }
 
     limitManager.endProgress();
+
+    // Auto-git: initializes a git repo for real project downloads.
+    // Skipped for sync temp folders (gitManager.isSyncTempPath check).
+    if (folder.isRemotePath && rootLocalPath && rootRemotePath) {
+      if (!gitManager.isSyncTempPath(rootLocalPath)) {
+        gitManager.initRepo(rootLocalPath).then((ok) => {
+          if (ok) logger.info(`Git inicializado em: ${rootLocalPath}`);
+        }).catch(() => {});
+      }
+    }
 
     // 🚀 NOVO: Dispara evento de projeto baixado + refresh automático
     if (folder.isRemotePath && rootLocalPath && rootRemotePath) {

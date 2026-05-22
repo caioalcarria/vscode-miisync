@@ -5,14 +5,16 @@ export interface ExtensionSettings {
     sessionDuration: number,
     refreshSession: boolean,
     requestLimit: number,
-    showDiffNotification: boolean
+    showDiffNotification: boolean,
+    gitCommitOnUpload: 'disabled' | 'ask' | 'always'
 }
 
 const defaultSettings: ExtensionSettings = {
     sessionDuration: 60,
     refreshSession: true,
     requestLimit: 40,
-    showDiffNotification: true
+    showDiffNotification: true,
+    gitCommitOnUpload: 'ask'
 }
 
 class SettingsManager {
@@ -32,7 +34,8 @@ class SettingsManager {
                 sessionDuration: config.get('sessionDuration'),
                 refreshSession: config.get('refreshSession'),
                 requestLimit: config.get('requestLimit'),
-                showDiffNotification: config.get('showDiffNotification')
+                showDiffNotification: config.get('showDiffNotification'),
+                gitCommitOnUpload: config.get('gitCommitOnUpload')
             }
         }
     }

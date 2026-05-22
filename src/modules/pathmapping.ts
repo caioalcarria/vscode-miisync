@@ -132,9 +132,6 @@ export class PathMappingManager {
     let contentHash: string | undefined;
     if (fileContent !== undefined) {
       contentHash = this.calculateContentHash(fileContent);
-      
-      // Cria backup do conteúdo original
-      await this.createFileBackup(rootLocalPath, localPath, fileContent);
     }
 
     // Remove mapeamento existente se houver
@@ -164,30 +161,7 @@ export class PathMappingManager {
     return crypto.createHash('sha256').update(content, 'utf8').digest('hex');
   }
 
-  /**
-   * Cria backup do conteúdo original do arquivo
-   */
-  static async createFileBackup(
-    rootLocalPath: string,
-    localPath: string,
-    content: string
-  ): Promise<void> {
-    try {
-      const backupDir = path.join(rootLocalPath, CONFIG_FOLDER_NAME, 'backup');
-      const backupFilePath = path.join(backupDir, localPath);
-      
-      // Garante que o diretório existe
-      await ensureDir(path.dirname(backupFilePath));
-      
-      // Salva conteúdo original
-      await writeFile(backupFilePath, content, 'utf8');
-    } catch (error) {
-      console.error('❌ Erro ao criar backup do arquivo:', error);
-      // Não falha o processo se backup falhar
-    }
-  }
-
-  /**
+/**
    * Busca o caminho remoto para um arquivo/pasta local
    * Retorna exatamente o caminho salvo no mapeamento, sem modificações
    */

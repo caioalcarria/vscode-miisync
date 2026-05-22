@@ -3,6 +3,7 @@ import * as fs from "fs-extra";
 import * as path from "path";
 import * as vscode from "vscode";
 import { projectEvents } from "../../events/projectevents";
+import { gitManager } from "../../modules/gitmanager";
 import { localFilesMappingManager } from "../../modules/localfilesmapping";
 
 /**
@@ -830,15 +831,52 @@ export class LocalProjectsTreeProvider
   }
 
   /**
-   * Encontra arquivos que foram modificados localmente e ainda não foram sincronizados
+   * Encontra arquivos modificados.
+   * Usa git status se o projeto tiver repositório git (fonte de verdade, zero falsos positivos).
+   * Caso contrário, usa comparação de hash como fallback.
    */
-  private async findModifiedFiles(
+  private async findModifiedFiles(projectPath: string): Promise<ModifiedFile[]> {
+    try {
+      if (await gitManager.isGitRepo(projectPath)) {
+        return await this.findModifiedFilesViaGit(projectPath);
+      }
+    } catch {}
+    return this.findModifiedFilesViaHash(projectPath);
+  }
+
+  private async findModifiedFilesViaGit(projectPath: string): Promise<ModifiedFile[]> {
+    const gitFiles = await gitManager.getStatus(projectPath);
+    const result: ModifiedFile[] = [];
+    for (const gf of gitFiles) {
+      let lastModified = new Date();
+      try {
+        if (gf.status !== 'deleted') {
+          const st = await fs.stat(gf.filePath);
+          lastModified = st.mtime;
+        }
+      } catch {}
+      const relPath = path.relative(projectPath, gf.filePath);
+      result.push({
+        fileName: path.basename(gf.filePath),
+        filePath: gf.filePath,
+        relativePath: relPath,
+        lastModified,
+        hasLocalChanges: true,
+        status: gf.status === 'added' ? FileStatus.Added
+              : gf.status === 'deleted' ? FileStatus.Deleted
+              : FileStatus.Modified,
+      });
+    }
+    return result;
+  }
+
+  private async findModifiedFilesViaHash(
     projectPath: string
   ): Promise<ModifiedFile[]> {
     const modifiedFiles: ModifiedFile[] = [];
 
     try {
-      // 🚀 NOVO SISTEMA: Primeiro verifica arquivos no sistema de mapeamento JSON
+      // Sistema de mapeamento JSON (novo)
       const mappedFiles = localFilesMappingManager.getAllFiles();
       const projectMappedFiles = mappedFiles.filter(
         (file) => file.localPath.startsWith(projectPath) && file.hasLocalChanges

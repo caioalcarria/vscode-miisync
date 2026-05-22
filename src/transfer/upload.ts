@@ -8,6 +8,7 @@ import {
   GetRemotePathWithMapping,
   PrepareUrisForService,
 } from "../modules/file";
+import { askGitUploadChoice, gitManager } from "../modules/gitmanager";
 import { localFilesMappingManager } from "../modules/localfilesmapping";
 import { PathMappingManager } from "../modules/pathmapping";
 import {
@@ -54,6 +55,31 @@ async function updatePathMappingForNewFile(
   }
 }
 
+
+async function handleGitCommitOnUpload(
+  localFilePath: string,
+  serverName: string
+): Promise<void> {
+  if (!(await gitManager.isInstalled())) return;
+
+  // Walk up to find the git repo root, falling back to the .miisync project root
+  let projectPath = path.dirname(localFilePath);
+  let hasGit = false;
+  let miisyncRoot: string | null = null;
+  while (projectPath && projectPath !== path.dirname(projectPath)) {
+    if (await gitManager.isGitRepo(projectPath)) { hasGit = true; break; }
+    if (!miisyncRoot && await pathExists(path.join(projectPath, '.miisync', 'path-mapping.json')))
+      miisyncRoot = projectPath;
+    projectPath = path.dirname(projectPath);
+  }
+  if (!hasGit && miisyncRoot) projectPath = miisyncRoot;
+
+  const doCommit = await askGitUploadChoice(path.basename(localFilePath));
+  if (!doCommit) return;
+
+  if (!hasGit) await gitManager.initRepo(projectPath);
+  await gitManager.commitFile(projectPath, localFilePath, serverName);
+}
 
 export async function UploadFile(
   uri: Uri,
@@ -138,6 +164,9 @@ export async function UploadFile(
     } catch (error) {
       console.error("Erro ao atualizar mapeamento:", error);
     }
+
+    // Git commit pós-upload (respeitando configuração gitCommitOnUpload)
+    await handleGitCommitOnUpload(uri.fsPath, system.name);
 
     return { aborted: false };
   };
