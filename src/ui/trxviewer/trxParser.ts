@@ -7,7 +7,8 @@ export interface TrxData {
     context: TrxVar[];
     local: TrxVar[];
     steps: TrxStep[];
-    actionDefs: Record<string, string>; // name → xsi:type
+    actionDefs: Record<string, string>;  // name → xsi:type
+    actionProps: Record<string, Record<string, any>>; // name → raw properties
 }
 
 export interface TrxVar {
@@ -56,6 +57,7 @@ export function parseTrx(xml: string): TrxData | null {
             attributeNamePrefix: '@_',
             textNodeName: '#text',
             isArray: (name) => ['ContextItem', 'Step', 'Action', 'Assign'].includes(name),
+            processEntities: { maxTotalExpansions: 50000, maxEntityCount: 50000 },
         });
 
         const doc = parser.parse(xml);
@@ -81,10 +83,18 @@ export function parseTrx(xml: string): TrxData | null {
         const local = asArray<Record<string, unknown>>(tx.Local?.ContextItem).map(parseVar);
 
         const actionDefs: Record<string, string> = {};
+        const actionProps: Record<string, Record<string, any>> = {};
         for (const item of asArray(tx.Actions?.ContextItem)) {
             const name = str(item.Name);
-            const type = (item.Value as Record<string, unknown>)?.['@_xsi:type'] as string || 'Unknown';
+            const val = item.Value as Record<string, unknown> ?? {};
+            const type = val['@_xsi:type'] as string || 'Unknown';
             actionDefs[name] = type;
+            // Store all properties except the xsi:type discriminator
+            const props: Record<string, any> = {};
+            for (const [k, v] of Object.entries(val)) {
+                if (k !== '@_xsi:type') props[k] = v;
+            }
+            actionProps[name] = props;
         }
 
         const steps = asArray(tx.Steps?.Step).map(parseStep);
@@ -97,9 +107,11 @@ export function parseTrx(xml: string): TrxData | null {
             local,
             steps,
             actionDefs,
+            actionProps,
         };
-    } catch {
-        return null;
+    } catch (e: any) {
+        console.error('[MiiSync] parseTrx exception:', e);
+        throw new Error(`TRX parse failed: ${e?.message || String(e)}`);
     }
 }
 

@@ -159,6 +159,13 @@
         "enablement": "miisync.enabled  && miisync.loggedin"
       },
       {
+        "command": "miisync.newTqsq",
+        "title": "Nova Query SQL (.tqsq)",
+        "icon": "$(new-file)",
+        "category": "mii",
+        "enablement": "miisync.enabled"
+      },
+      {
         "command": "miisync.deleteworkspace",
         "title": "Delete",
         "icon": "$(close)",
@@ -581,14 +588,19 @@
           "group": "navigation@0"
         },
         {
-          "command": "miisync.trxSetRootPath",
+          "command": "miisync.newTqsq",
           "when": "view == trxdirectory",
           "group": "navigation@0"
         },
         {
-          "command": "miisync.trxRefresh",
+          "command": "miisync.trxSetRootPath",
           "when": "view == trxdirectory",
           "group": "navigation@1"
+        },
+        {
+          "command": "miisync.trxRefresh",
+          "when": "view == trxdirectory",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -784,6 +796,13 @@
             "default": "ask",
             "description": "Controls whether MiiSync creates a git commit after a successful file upload.",
             "order": 3
+          },
+          "miisync.tqsqHiddenTablePrefixes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": ["BC_","CMST_","CR_","EP_","IDP_","ITSAM_","J2EE_","JPL_","MPM_","SAML2_","SEC_","SMET_","SR_","TC_","UME_","XI_","XMII_"],
+            "description": "Prefixos de tabelas ocultados no Schema Browser do TQSQ Editor (marcado = oculto).",
+            "order": 4
           }
         }
       },
@@ -920,6 +939,14 @@
         "displayName": "MII TRX Viewer",
         "selector": [
           { "filenamePattern": "*.trx" }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "miisync.tqsqEditor",
+        "displayName": "MII Query Editor",
+        "selector": [
+          { "filenamePattern": "*.tqsq" }
         ],
         "priority": "default"
       }

@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { CatalogCategory } from '../../modules/actioncatalog';
 import { actionCatalog } from '../../modules/actioncatalog';
 import { configManager } from '../../modules/config';
+import { illuminatorService } from '../../miiservice/illuminatorService';
+import { runnerService } from '../../miiservice/runnerService';
 import { parseTrx, TrxData, addSequenceToRawTrx, addActionToRawTrx, deleteActionFromRawTrx, deleteSequenceFromRawTrx } from './trxParser';
 
 // Track active panels for catalog updates
@@ -54,29 +56,49 @@ export class TrxViewerProvider implements vscode.CustomReadonlyEditorProvider {
             // Message handling for edits
             webviewPanel.webview.onDidReceiveMessage(async (msg) => {
                 try {
-                    const bytes = await vscode.workspace.fs.readFile(document.uri);
-                    const xml = new TextDecoder('utf-8').decode(bytes);
-                    let newXml: string | null = null;
-
                     switch (msg.type) {
                         case 'addSequence':
-                            newXml = addSequenceToRawTrx(xml, msg.path, msg.position);
-                            break;
                         case 'addAction':
-                            newXml = addActionToRawTrx(xml, msg.path, msg.actionType, msg.actionLabel);
-                            break;
                         case 'deleteAction':
-                            newXml = deleteActionFromRawTrx(xml, msg.path, msg.actionName);
+                        case 'deleteSequence': {
+                            const bytes = await vscode.workspace.fs.readFile(document.uri);
+                            const xml = new TextDecoder('utf-8').decode(bytes);
+                            let newXml: string | null = null;
+                            if (msg.type === 'addSequence') newXml = addSequenceToRawTrx(xml, msg.path, msg.position);
+                            else if (msg.type === 'addAction') newXml = addActionToRawTrx(xml, msg.path, msg.actionType, msg.actionLabel);
+                            else if (msg.type === 'deleteAction') newXml = deleteActionFromRawTrx(xml, msg.path, msg.actionName);
+                            else if (msg.type === 'deleteSequence') newXml = deleteSequenceFromRawTrx(xml, msg.path);
+                            if (newXml && newXml !== xml) {
+                                await vscode.workspace.fs.writeFile(document.uri, new TextEncoder().encode(newXml));
+                                const data = parseTrx(newXml);
+                                webviewPanel.webview.postMessage({ type: 'refresh', data });
+                            }
                             break;
-                        case 'deleteSequence':
-                            newXml = deleteSequenceFromRawTrx(xml, msg.path);
+                        }
+                        case 'runTransaction': {
+                            const system = configManager.CurrentSystem;
+                            if (!system) {
+                                webviewPanel.webview.postMessage({ type: 'runResult', ok: false, error: 'Não conectado ao servidor MII' });
+                                break;
+                            }
+                            const result = await runnerService.execute(system, msg.transactionPath, msg.params ?? {});
+                            webviewPanel.webview.postMessage({ type: 'runResult', ok: result.success, outputs: result.outputs, error: result.error, rawXml: result.rawXml });
                             break;
-                    }
-
-                    if (newXml && newXml !== xml) {
-                        await vscode.workspace.fs.writeFile(document.uri, new TextEncoder().encode(newXml));
-                        const data = parseTrx(newXml);
-                        webviewPanel.webview.postMessage({ type: 'refresh', data });
+                        }
+                        case 'loadJCOConnections': {
+                            const system = configManager.CurrentSystem;
+                            if (!system) { webviewPanel.webview.postMessage({ type: 'jcoConnections', connections: [] }); break; }
+                            const connections = await illuminatorService.getJCOConnections(system).catch(() => []);
+                            webviewPanel.webview.postMessage({ type: 'jcoConnections', connections });
+                            break;
+                        }
+                        case 'loadBLSCredentials': {
+                            const system = configManager.CurrentSystem;
+                            if (!system) { webviewPanel.webview.postMessage({ type: 'blsCredentials', credentials: [] }); break; }
+                            const credentials = await illuminatorService.getBLSCredentials(system).catch(() => []);
+                            webviewPanel.webview.postMessage({ type: 'blsCredentials', credentials });
+                            break;
+                        }
                     }
                 } catch (e: any) {
                     vscode.window.showErrorMessage('TRX edit failed: ' + e.message);
@@ -111,6 +133,8 @@ function buildHtml(data: TrxData | null, filePath: string, categories: CatalogCa
     const safeJson = JSON.stringify(data ?? null).replace(/</g, '\\u003C').replace(/>/g, '\\u003E');
     const safeCatalog = JSON.stringify(categories).replace(/</g, '\\u003C').replace(/>/g, '\\u003E');
     const fileName = filePath.replace(/\\/g, '/').split('/').pop() ?? filePath;
+    // remotePath hint: strip workspace prefix so TRX has its catalog path (used by Run Transaction)
+    const trxRemotePath = filePath.replace(/\\/g, '/').replace(/.*?(?=Default\/)/, '').replace(/\.trx$/i, '');
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -138,6 +162,7 @@ window.onerror = function(msg, url, line, col, err) {
 const vscode = acquireVsCodeApi();
 const DATA = ${safeJson};
 const FILE_NAME = ${JSON.stringify(fileName)};
+const TRX_REMOTE_PATH = ${JSON.stringify(trxRemotePath)};
 let CATALOG = ${safeCatalog};
 
 ${JS_CONTENT}
@@ -521,6 +546,88 @@ tr:hover td { background: #2a2d2e; }
 
 .empty-msg { color: #666; font-style: italic; font-size: 12px; padding: 8px 0; }
 
+/* ── Properties sidebar ── */
+.props-sidebar {
+  width: 280px; min-width: 280px;
+  background: var(--vscode-sideBar-background, #252526);
+  border-left: 1px solid var(--vscode-panel-border, #444);
+  display: flex; flex-direction: column; overflow: hidden;
+  transition: width 0.15s, min-width 0.15s;
+}
+.props-sidebar.collapsed { width: 0; min-width: 0; border-left: none; }
+.props-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px; color: #888;
+  border-bottom: 1px solid var(--vscode-panel-border, #444); flex-shrink: 0;
+}
+.props-close { background: none; border: none; color: #888; cursor: pointer; font-size: 12px; padding: 2px 4px; }
+.props-close:hover { color: #ccc; }
+.props-body { flex: 1; overflow-y: auto; padding: 10px; }
+.props-title { font-size: 11px; font-weight: 700; color: #ccc; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #333; word-break: break-all; }
+.props-type-pill { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 3px; background: #1e3a4a; color: #5ab8e2; margin-bottom: 8px; }
+.prop-group { margin-bottom: 14px; }
+.prop-group-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin-bottom: 6px; }
+.prop-row { margin-bottom: 8px; }
+.prop-label { font-size: 10px; color: #888; margin-bottom: 2px; }
+.prop-value { font-size: 11px; color: #ccc; word-break: break-all; font-family: monospace; background: #1e1e28; padding: 3px 6px; border-radius: 2px; line-height: 1.4; }
+.prop-value.empty { color: #555; font-style: italic; font-family: inherit; }
+.prop-link { font-size: 10px; color: #4ec9b0; text-decoration: underline; cursor: pointer; background: none; border: none; padding: 0; }
+.links-edit-section { margin-top: 10px; }
+.links-edit-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin-bottom: 5px; }
+.link-edit-row { display: flex; flex-direction: column; gap: 2px; background: #1e1e28; border-radius: 3px; padding: 5px 7px; margin-bottom: 5px; font-size: 10px; }
+.link-edit-from { color: #9cdcfe; font-family: monospace; word-break: break-all; }
+.link-edit-arrow { color: #4ec9b0; font-size: 10px; }
+.link-edit-to { color: #4ec9b0; font-family: monospace; word-break: break-all; }
+.link-edit-type { font-size: 9px; color: #666; }
+.props-run-btn {
+  margin: 10px 10px 0; padding: 7px; background: #1a4a1a; color: #6dbf6d;
+  border: 1px solid #2d7a2d; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 600; width: calc(100% - 20px);
+}
+.props-run-btn:hover { background: #1e5c1e; }
+
+/* ── Run modal ── */
+.run-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  z-index: 99999; display: flex; align-items: center; justify-content: center;
+}
+.run-modal {
+  background: #252526; border: 1px solid #555; border-radius: 6px;
+  width: 520px; max-width: 95vw; max-height: 85vh;
+  display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+}
+.run-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid #444; flex-shrink: 0;
+}
+.run-modal-title { font-size: 13px; font-weight: 700; color: #ccc; }
+.run-modal-close { background: none; border: none; color: #888; cursor: pointer; font-size: 16px; }
+.run-modal-close:hover { color: #ccc; }
+.run-modal-body { flex: 1; overflow-y: auto; padding: 14px 16px; }
+.run-params-section { margin-bottom: 14px; }
+.run-params-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 8px; }
+.run-param-row { display: grid; grid-template-columns: 130px 1fr; gap: 8px; align-items: center; margin-bottom: 7px; }
+.run-param-label { font-size: 11px; color: #ccc; text-align: right; padding-right: 4px; }
+.run-param-input { background: var(--vscode-input-background,#3c3c3c); color: var(--vscode-input-foreground,#ccc); border: 1px solid var(--vscode-input-border,#555); border-radius: 3px; padding: 4px 8px; font-size: 12px; outline: none; width: 100%; }
+.run-param-input:focus { border-color: var(--vscode-focusBorder,#007acc); }
+.run-modal-footer { padding: 10px 16px; border-top: 1px solid #444; display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.run-btn-execute { padding: 7px 20px; background: #1a7a1a; color: #7df07d; border: 1px solid #2da02d; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 700; }
+.run-btn-execute:disabled { opacity: 0.5; cursor: default; }
+.run-btn-execute:hover:not(:disabled) { background: #1f8f1f; }
+.run-btn-cancel { padding: 7px 14px; background: #3a3d41; color: #ccc; border: 1px solid #555; border-radius: 3px; cursor: pointer; font-size: 12px; }
+.run-btn-cancel:hover { background: #505357; }
+.run-status { font-size: 11px; color: #888; font-style: italic; }
+.run-result-section { margin-top: 12px; }
+.run-result-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 6px; }
+.run-result-success { color: #4ec9b0; font-size: 12px; margin-bottom: 8px; }
+.run-result-error { color: #f48771; font-size: 12px; margin-bottom: 8px; }
+.run-output-row { display: grid; grid-template-columns: 140px 1fr; gap: 6px; margin-bottom: 5px; font-size: 11px; border-bottom: 1px solid #2a2a2a; padding-bottom: 4px; }
+.run-output-key { color: #9cdcfe; font-weight: 600; word-break: break-all; }
+.run-output-val { color: #ccc; font-family: monospace; word-break: break-all; max-height: 60px; overflow: auto; }
+.run-xml-btn { font-size: 10px; color: #888; background: none; border: 1px solid #444; border-radius: 2px; cursor: pointer; padding: 2px 6px; margin-top: 6px; }
+.run-xml-btn:hover { color: #ccc; border-color: #666; }
+.run-xml-pre { background: #1a1a2a; border: 1px solid #333; border-radius: 3px; padding: 8px; font-size: 10px; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 150px; overflow-y: auto; color: #9cdcfe; margin-top: 6px; }
+
 /* ── Confirm modal ── */
 .confirm-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.55);
@@ -772,12 +879,15 @@ function createActionCard(actionRef, actionDefs, stepPath) {
   card.appendChild(name);
   card.appendChild(delBtn);
 
-  if (actionRef.incoming.length > 0 || actionRef.outgoing.length > 0) {
-    card.addEventListener('click', (e) => {
-      e.stopPropagation();
+  card.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (actionRef.incoming.length > 0 || actionRef.outgoing.length > 0) {
       showLinks(actionRef, type, card);
-    });
-  }
+    }
+    // Show full properties in sidebar
+    const props = DATA && DATA.actionProps ? (DATA.actionProps[actionRef.name] || {}) : {};
+    showActionProps(actionRef.name, type, props, actionRef.incoming, actionRef.outgoing);
+  });
   return card;
 }
 
@@ -1182,6 +1292,7 @@ window.addEventListener('message', (event) => {
         DATA.local = msg.data.local;
         DATA.steps = msg.data.steps;
         DATA.actionDefs = msg.data.actionDefs;
+        DATA.actionProps = msg.data.actionProps || {};
       }
       selectedPath = null;
       renderDiagram();
@@ -1268,6 +1379,13 @@ function render() {
   const shortName = txName.split('/').pop() || txName;
 
   app.innerHTML =
+    '<div id="props-sidebar" class="props-sidebar collapsed">' +
+      '<div class="props-header">' +
+        '<span>Propriedades</span>' +
+        '<button class="props-close" id="btn-props-close">✕</button>' +
+      '</div>' +
+      '<div class="props-body" id="props-body"></div>' +
+    '</div>' +
     '<div class="sidebar" id="sidebar">' +
       '<div class="sidebar-header">' +
         '<span>Actions</span>' +
@@ -1299,6 +1417,8 @@ function render() {
         '<div class="toolbar-sep"></div>' +
         '<button class="toolbar-btn" id="btn-add-seq-below" disabled>+ Seq Abaixo</button>' +
         '<button class="toolbar-btn" id="btn-add-seq-parent" disabled>+ Seq Pai</button>' +
+        '<div class="toolbar-sep"></div>' +
+        '<button class="toolbar-btn" id="btn-run-trx" style="background:#1a4a1a;color:#6dbf6d;border-color:#2d7a2d">▶ Executar</button>' +
       '</div>' +
       '<div class="panel active" id="panel-diagram">' +
         '<div class="diagram-scroll" id="diagram-scroll">' +
@@ -1354,7 +1474,248 @@ function render() {
   if (btnSeqParent) btnSeqParent.addEventListener('click', addSequenceAsParent);
   var searchInput = document.getElementById('sidebar-search-input');
   if (searchInput) searchInput.addEventListener('input', function() { filterActions(this.value); });
+  var btnRunTrx = document.getElementById('btn-run-trx');
+  if (btnRunTrx) btnRunTrx.addEventListener('click', openRunModal);
+  var btnPropsClose = document.getElementById('btn-props-close');
+  if (btnPropsClose) btnPropsClose.addEventListener('click', closePropsPanel);
 }
+
+// ─── Properties sidebar ────────────────────────────────────────────────────
+
+let selectedAction = null; // {name, type, props, incoming, outgoing}
+
+function showActionProps(name, type, props, incoming, outgoing) {
+  selectedAction = {name, type, props: props||{}, incoming: incoming||[], outgoing: outgoing||[]};
+  const sidebar = document.getElementById('props-sidebar');
+  if (sidebar) {
+    sidebar.classList.remove('collapsed');
+    renderPropsPanel();
+  }
+}
+
+function renderPropsPanel() {
+  const body = document.getElementById('props-body');
+  if (!body || !selectedAction) return;
+
+  const {name, type, props, incoming, outgoing} = selectedAction;
+  let html = \`<div class="props-title" title="\${esc(name)}">\${esc(name)}</div>
+<div class="props-type-pill">\${esc(type)}</div>\`;
+
+  // Type-specific properties
+  if (type === 'IlluminatorSQLQueryObject') {
+    html += \`<div class="prop-group">
+      <div class="prop-group-title">Configuração SQL</div>
+      <div class="prop-row"><div class="prop-label">QueryTemplate</div>
+        <div class="prop-value \${props.QueryTemplate?'':'empty'}">\${esc(props.QueryTemplate||'(não definido)')}</div></div>
+      <div class="prop-row"><div class="prop-label">Timeout</div>
+        <div class="prop-value">\${esc(props.Timeout||'0')}</div></div>
+    </div>\`;
+    if (props.QueryParameters) {
+      const items = props.QueryParameters?.ContextItem;
+      const arr = Array.isArray(items) ? items : (items ? [items] : []);
+      if (arr.length) {
+        html += \`<div class="prop-group"><div class="prop-group-title">Parâmetros (\${arr.length})</div>\`;
+        html += arr.map(p => \`<div class="prop-row">
+          <div class="prop-label">\${esc(p.Name||'')}</div>
+          <div class="prop-value">\${esc(String(p.Value?.['#text']||p.Value||''))}</div>
+        </div>\`).join('');
+        html += '</div>';
+      }
+    }
+  } else if (type === 'SAPJCOInterface') {
+    html += \`<div class="prop-group">
+      <div class="prop-group-title">Conexão JCO</div>
+      \${['ConnPropAlias','CredentialAlias','SAPRFC','SAPServerName','SAPClient','SAPSystemNumber','Language'].map(k =>
+        \`<div class="prop-row"><div class="prop-label">\${k}</div>
+         <div class="prop-value \${props[k]?'':'empty'}">\${esc(props[k]||'(não definido)')}</div></div>\`
+      ).join('')}
+      \${['ExecuteFunction','AutoCommit','AllowMultipleRows'].map(k =>
+        \`<div class="prop-row"><div class="prop-label">\${k}</div>
+         <div class="prop-value">\${esc(props[k]||'false')}</div></div>\`
+      ).join('')}
+    </div>\`;
+  } else if (type === 'Tracer' || type === 'XmlTracer' || type === 'EventLogger') {
+    html += \`<div class="prop-group">
+      <div class="prop-group-title">Tracer</div>
+      <div class="prop-row"><div class="prop-label">Message</div>
+        <div class="prop-value \${props.Message?'':'empty'}">\${esc(props.Message||'(vazio)')}</div></div>
+      <div class="prop-row"><div class="prop-label">Level</div>
+        <div class="prop-value">\${esc(props.Level||'INFO')}</div></div>
+    </div>\`;
+  } else if (type === 'TransactionCall') {
+    html += \`<div class="prop-group">
+      <div class="prop-group-title">Chamada de Transaction</div>
+      <div class="prop-row"><div class="prop-label">TransactionPath</div>
+        <div class="prop-value \${props.TransactionPath?'':'empty'}">\${esc(props.TransactionPath||'(não definido)')}</div></div>
+    </div>\`;
+  } else if (type === 'Assignment') {
+    html += \`<div class="prop-group"><div style="color:#666;font-size:11px;font-style:italic">Assignment não tem propriedades próprias — use os links para definir atribuições.</div></div>\`;
+  } else if (type === 'ConditionalAction') {
+    html += \`<div class="prop-group">
+      <div class="prop-group-title">Condição</div>
+      \${['Input1','Input2','Input3','Output','LogicalAnd','InputCount'].filter(k=>props[k]!=null).map(k =>
+        \`<div class="prop-row"><div class="prop-label">\${k}</div>
+         <div class="prop-value">\${esc(String(props[k]||''))}</div></div>\`
+      ).join('')}
+    </div>\`;
+  } else {
+    // Generic: show all props
+    const keys = Object.keys(props).filter(k => !k.startsWith('@'));
+    if (keys.length) {
+      html += \`<div class="prop-group"><div class="prop-group-title">Propriedades</div>\`;
+      html += keys.map(k => \`<div class="prop-row">
+        <div class="prop-label">\${esc(k)}</div>
+        <div class="prop-value">\${esc(String(props[k]||''))}</div>
+      </div>\`).join('');
+      html += '</div>';
+    }
+  }
+
+  // Links section
+  if (incoming.length || outgoing.length) {
+    html += \`<div class="links-edit-section">\`;
+    if (incoming.length) {
+      html += \`<div class="links-edit-title">Incoming Links (\${incoming.length})</div>\`;
+      html += incoming.map(l => \`<div class="link-edit-row">
+        <div class="link-edit-from">\${esc(l.from)}</div>
+        <div class="link-edit-arrow">→</div>
+        <div class="link-edit-to">\${esc(l.to)}</div>
+        <div class="link-edit-type">\${esc(l.type||'Assign')}</div>
+      </div>\`).join('');
+    }
+    if (outgoing.length) {
+      html += \`<div class="links-edit-title" style="margin-top:8px">Outgoing Links (\${outgoing.length})</div>\`;
+      html += outgoing.map(l => \`<div class="link-edit-row">
+        <div class="link-edit-from">\${esc(l.from)}</div>
+        <div class="link-edit-arrow">→</div>
+        <div class="link-edit-to">\${esc(l.to)}</div>
+        <div class="link-edit-type">\${esc(l.type||'Assign')}</div>
+      </div>\`).join('');
+    }
+    html += '</div>';
+  }
+
+  body.innerHTML = html;
+}
+
+function closePropsPanel() {
+  selectedAction = null;
+  const sidebar = document.getElementById('props-sidebar');
+  if (sidebar) sidebar.classList.add('collapsed');
+}
+
+// ─── Run Transaction modal ──────────────────────────────────────────────────
+
+let runModalOpen = false;
+let runRunning = false;
+let runResult = null;
+let runShowXml = false;
+
+function openRunModal() {
+  runModalOpen = true;
+  runRunning = false;
+  runResult = null;
+  runShowXml = false;
+  renderRunModal();
+}
+
+function renderRunModal() {
+  // Remove existing
+  const existing = document.getElementById('run-modal-overlay');
+  if (existing) existing.remove();
+  if (!runModalOpen) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'run-modal-overlay';
+  overlay.id = 'run-modal-overlay';
+
+  const ctxVars = (DATA && DATA.context) ? DATA.context : [];
+  const trxName = TRX_REMOTE_PATH ? TRX_REMOTE_PATH.split('/').pop() : FILE_NAME;
+
+  const paramsHtml = ctxVars.length
+    ? ctxVars.map(v => \`<div class="run-param-row">
+        <label class="run-param-label" for="rp-\${esc(v.name)}">\${esc(v.name)}
+          <span style="font-size:9px;color:#666"> (\${esc(v.type||'string')})</span>
+        </label>
+        <input class="run-param-input" id="rp-\${esc(v.name)}" placeholder="" data-name="\${esc(v.name)}">
+      </div>\`).join('')
+    : '<div style="color:#666;font-size:11px;font-style:italic">Esta transaction não tem parâmetros de entrada.</div>';
+
+  let resultHtml = '';
+  if (runRunning) {
+    resultHtml = '<div class="run-status"><span class="spinner"></span> Executando...</div>';
+  } else if (runResult) {
+    if (runResult.ok) {
+      const outputs = runResult.outputs || {};
+      const keys = Object.keys(outputs);
+      resultHtml = \`<div class="run-result-section">
+        <div class="run-result-success">✔ Execução concluída</div>
+        \${keys.length ? \`<div class="run-result-title">Saída (\${keys.length} variáveis)</div>
+        \${keys.map(k=>\`<div class="run-output-row">
+          <div class="run-output-key">\${esc(k)}</div>
+          <div class="run-output-val">\${esc(String(outputs[k]||''))}</div>
+        </div>\`).join('')}\` : '<div style="color:#666;font-size:11px">Nenhuma variável de saída retornada.</div>'}
+        \${runResult.rawXml ? \`<button class="run-xml-btn" id="btn-toggle-xml">\${runShowXml?'Ocultar XML':'Ver XML completo'}</button>
+        \${runShowXml ? \`<pre class="run-xml-pre">\${esc(runResult.rawXml)}</pre>\` : ''}\` : ''}
+      </div>\`;
+    } else {
+      resultHtml = \`<div class="run-result-section"><div class="run-result-error">✘ \${esc(runResult.error||'Erro na execução')}</div></div>\`;
+    }
+  }
+
+  overlay.innerHTML = \`<div class="run-modal">
+    <div class="run-modal-header">
+      <span class="run-modal-title">▶ Executar: \${esc(trxName)}</span>
+      <button class="run-modal-close" id="btn-run-close">✕</button>
+    </div>
+    <div class="run-modal-body">
+      <div class="run-params-section">
+        <div class="run-params-title">Parâmetros de Entrada (Context)</div>
+        \${paramsHtml}
+      </div>
+      \${resultHtml}
+    </div>
+    <div class="run-modal-footer">
+      <button class="run-btn-execute" id="btn-run-execute" \${runRunning?'disabled':''}>▶ Executar</button>
+      <button class="run-btn-cancel" id="btn-run-cancel">Fechar</button>
+      <span class="run-status" id="run-status-msg"></span>
+    </div>
+  </div>\`;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('btn-run-close')?.addEventListener('click', () => { runModalOpen=false; overlay.remove(); });
+  document.getElementById('btn-run-cancel')?.addEventListener('click', () => { runModalOpen=false; overlay.remove(); });
+  overlay.addEventListener('click', e => { if(e.target===overlay){ runModalOpen=false; overlay.remove(); } });
+
+  document.getElementById('btn-toggle-xml')?.addEventListener('click', () => { runShowXml = !runShowXml; renderRunModal(); });
+
+  document.getElementById('btn-run-execute')?.addEventListener('click', () => {
+    const params = {};
+    overlay.querySelectorAll('.run-param-input[data-name]').forEach(inp => {
+      params[inp.dataset.name] = inp.value;
+    });
+    runRunning = true;
+    runResult = null;
+    renderRunModal();
+    vscode.postMessage({ type: 'runTransaction', transactionPath: TRX_REMOTE_PATH, params });
+  });
+}
+
+// ─── Messages from extension (extend existing handler) ─────────────────────
+
+const _origHandler = window.onmessage;
+window.addEventListener('message', (event) => {
+  const msg = event.data;
+  if (msg.type === 'runResult') {
+    runRunning = false;
+    runResult = msg;
+    renderRunModal();
+  }
+  if (msg.type === 'jcoConnections') {
+    // Could update properties panel if action is JCO type
+  }
+});
 
 render();
 `;

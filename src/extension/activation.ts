@@ -69,6 +69,7 @@ import { projectsTree } from "../ui/treeview/projectsTree";
 import { remoteDirectoryTree } from "../ui/treeview/remotedirectorytree";
 import { trxDirectoryTree } from "../ui/treeview/trxexplorer";
 import { TrxViewerProvider } from "../ui/trxviewer/trxViewerProvider";
+import { TqsqEditorProvider } from "../ui/tqsqeditor/TqsqEditorProvider";
 import transactionPropertiesVirtualDoc from "../ui/virtualdocument/transactionproperties";
 import { MiiSyncConfigWebViewProvider } from "../ui/webview/miisyncConfigWebViewProvider";
 
@@ -253,14 +254,20 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
   );
   RegisterCommand("miisync.trxUpload", OnCommandTrxUpload, context);
   RegisterCommand("miisync.trxUploadWithBkp", OnCommandTrxUploadWithBkp, context);
+
+  RegisterCommand("miisync.newTqsq", async () => {
+    const uri = vscode.Uri.from({ scheme: 'untitled', path: 'Nova Query.tqsq' });
+    await vscode.commands.executeCommand('vscode.openWith', uri, TqsqEditorProvider.viewType);
+  }, context);
 }
 
 // Variável global para o provider de configurações
 let configWebViewProvider: MiiSyncConfigWebViewProvider;
 
 export function activateTree(context: vscode.ExtensionContext) {
-  // Registra o custom editor para arquivos .trx
+  // Registra os custom editors para arquivos .trx e .tqsq
   context.subscriptions.push(TrxViewerProvider.register(context));
+  context.subscriptions.push(TqsqEditorProvider.register(context));
 
   // Registra os tree data providers — sidebar web
   context.subscriptions.push(
