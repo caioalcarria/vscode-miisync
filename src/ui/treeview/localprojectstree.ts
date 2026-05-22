@@ -1,10 +1,8 @@
-import * as crypto from "crypto";
 import * as fs from "fs-extra";
 import * as path from "path";
 import * as vscode from "vscode";
 import { projectEvents } from "../../events/projectevents";
 import { gitManager } from "../../modules/gitmanager";
-import { localFilesMappingManager } from "../../modules/localfilesmapping";
 
 /**
  * Status de modificação do arquivo
@@ -404,7 +402,6 @@ export class LocalProjectsTreeProvider
   constructor() {
     this.refresh();
     this.setupAutoRefresh();
-    this.setupMappingSystemIntegration();
   }
 
   /**
@@ -412,23 +409,6 @@ export class LocalProjectsTreeProvider
    */
   public getProjects(): LocalProject[] {
     return [...this.projects]; // Retorna uma cópia para evitar modificações externas
-  }
-
-  /**
-   * 🚀 INTEGRAÇÃO COM O SISTEMA DE MAPEAMENTO JSON
-   */
-  private setupMappingSystemIntegration(): void {
-    // Monitora mudanças no sistema de mapeamento de arquivos
-    localFilesMappingManager.onDidChangeMappings((changedFiles) => {
-      // console.log(
-      //   `🔄 Sistema de mapeamento atualizado: ${changedFiles.length} arquivo(s) alterados`
-      // );
-
-      // Faz refresh da árvore quando o mapeamento muda
-      this.scheduleRefresh("sistema de mapeamento atualizado");
-    });
-
-    //console.log("🔗 Integração com sistema de mapeamento JSON configurada");
   }
 
   /**
@@ -454,15 +434,8 @@ export class LocalProjectsTreeProvider
     });
 
     // 3. Monitor de arquivos deletados
-    vscode.workspace.onDidDeleteFiles(async (event) => {
+    vscode.workspace.onDidDeleteFiles(() => {
       // console.log(`🗑️ Arquivos deletados: ${event.files.length}`);
-      for (const uri of event.files) {
-        try {
-          await localFilesMappingManager.removeFile(uri.fsPath);
-        } catch {
-          /* ignore */
-        }
-      }
       this.scheduleRefresh("arquivos deletados");
     });
 
@@ -806,13 +779,6 @@ export class LocalProjectsTreeProvider
         remotePath = remoteDir;
       }
 
-      // 🚀 NOVO: Registra arquivos no sistema de mapeamento JSON
-      await this.registerProjectInMappingSystem(
-        projectPath,
-        remotePath,
-        mappingData
-      );
-
       // Encontra arquivos modificados
       const modifiedFiles = await this.findModifiedFiles(projectPath);
 
@@ -830,18 +796,9 @@ export class LocalProjectsTreeProvider
     }
   }
 
-  /**
-   * Encontra arquivos modificados.
-   * Usa git status se o projeto tiver repositório git (fonte de verdade, zero falsos positivos).
-   * Caso contrário, usa comparação de hash como fallback.
-   */
   private async findModifiedFiles(projectPath: string): Promise<ModifiedFile[]> {
-    try {
-      if (await gitManager.isGitRepo(projectPath)) {
-        return await this.findModifiedFilesViaGit(projectPath);
-      }
-    } catch {}
-    return this.findModifiedFilesViaHash(projectPath);
+    if (!(await gitManager.isGitRepo(projectPath))) return [];
+    return this.findModifiedFilesViaGit(projectPath);
   }
 
   private async findModifiedFilesViaGit(projectPath: string): Promise<ModifiedFile[]> {
@@ -868,354 +825,6 @@ export class LocalProjectsTreeProvider
       });
     }
     return result;
-  }
-
-  private async findModifiedFilesViaHash(
-    projectPath: string
-  ): Promise<ModifiedFile[]> {
-    const modifiedFiles: ModifiedFile[] = [];
-
-    try {
-      // Sistema de mapeamento JSON (novo)
-      const mappedFiles = localFilesMappingManager.getAllFiles();
-      const projectMappedFiles = mappedFiles.filter(
-        (file) => file.localPath.startsWith(projectPath) && file.hasLocalChanges
-      );
-
-      // console.log(`📁 Projeto ${path.basename(projectPath)}: ${projectMappedFiles.length} arquivos no mapeamento JSON`);
-
-      // Converte arquivos do novo sistema para o formato esperado
-      for (const mappedFile of projectMappedFiles) {
-        const relativePath = path.relative(projectPath, mappedFile.localPath);
-        const fileName = path.basename(mappedFile.localPath);
-
-        let fileStatus: FileStatus;
-        switch (mappedFile.status) {
-          case "added":
-            fileStatus = FileStatus.Added;
-            break;
-          case "deleted":
-            fileStatus = FileStatus.Deleted;
-            break;
-          case "modified":
-            fileStatus = FileStatus.Modified;
-            break;
-          default:
-            fileStatus = FileStatus.Modified;
-            break;
-        }
-
-        modifiedFiles.push({
-          fileName,
-          filePath: mappedFile.localPath,
-          relativePath,
-          lastModified: mappedFile.lastModified,
-          hasLocalChanges: mappedFile.hasLocalChanges,
-          status: fileStatus,
-          originalHash: mappedFile.originalHash,
-        });
-      }
-
-      // 🔄 SISTEMA LEGADO: Continua verificando pelo sistema antigo para compatibilidade
-      const mappingPath = path.join(
-        projectPath,
-        ".miisync",
-        "path-mapping.json"
-      );
-      if (!(await fs.pathExists(mappingPath))) {
-        return modifiedFiles; // Se não tem mapping antigo, retorna só os do novo sistema
-      }
-
-      const mappingData = await fs.readJson(mappingPath);
-
-      // Cria um mapa dos arquivos mapeados para verificação rápida
-      const legacyMappedFiles = new Map<string, any>();
-      for (const mapping of mappingData.mappings || []) {
-        legacyMappedFiles.set(mapping.localPath.toLowerCase(), mapping);
-      }
-
-      // Verifica arquivos que existem no mapeamento antigo mas não no novo
-      for (const mapping of mappingData.mappings || []) {
-        const fullPath = path.join(projectPath, mapping.localPath);
-
-        // Pula se já foi processado pelo novo sistema
-        if (projectMappedFiles.some((f) => f.localPath === fullPath)) {
-          continue;
-        }
-
-        if (await fs.pathExists(fullPath)) {
-          // Arquivo existe - verifica se foi modificado
-          const stats = await fs.stat(fullPath);
-          let wasModified = false;
-          let modificationReason = "";
-
-          // ESTRATÉGIA DUPLA: Verifica TANTO data quanto hash para máxima precisão
-
-          // 1. Verifica data de modificação vs data salva no download
-          let dateChanged = false;
-          if (mapping.localModifiedAtDownload) {
-            const downloadDate = new Date(mapping.localModifiedAtDownload);
-            const currentDate = stats.mtime;
-            const timeDiff = Math.abs(
-              currentDate.getTime() - downloadDate.getTime()
-            );
-
-            if (timeDiff > 1000) {
-              dateChanged = true;
-              modificationReason += `data (diff: ${timeDiff}ms) `;
-            }
-          }
-
-          // 2. Verifica hash do conteúdo (sempre que possível)
-          let hashChanged = false;
-          if (mapping.contentHash) {
-            const currentHash = await this.calculateFileHash(fullPath);
-            if (currentHash !== mapping.contentHash) {
-              hashChanged = true;
-              modificationReason += `conteúdo `;
-            }
-          }
-
-          // 3. Decisão final: arquivo só é considerado modificado se:
-          // - Data mudou E hash mudou (arquivo realmente alterado)
-          // - Ou só hash mudou (se não tem data salva)
-          // - Ou só data mudou (se não tem hash salvo)
-          if (mapping.contentHash && mapping.localModifiedAtDownload) {
-            // Tem ambos: só considera modificado se HASH mudou
-            wasModified = hashChanged;
-            if (hashChanged) {
-              // console.log(
-              //   `📝 Arquivo modificado (conteúdo): ${mapping.localPath}`
-              // );
-            } else if (dateChanged) {
-              // console.log(
-              //   `⏰ Data mudou mas conteúdo igual: ${mapping.localPath} - IGNORANDO`
-              //);
-            }
-          } else if (mapping.contentHash) {
-            // Só tem hash: verifica hash
-            wasModified = hashChanged;
-            if (hashChanged) {
-              //console.log(
-              //  `📝 Arquivo modificado por hash: ${mapping.localPath}`
-              //);
-            }
-          } else if (mapping.localModifiedAtDownload) {
-            // Só tem data: verifica data
-            wasModified = dateChanged;
-            if (dateChanged) {
-              //.log(
-              //   `📝 Arquivo modificado por data: ${mapping.localPath}`
-              //);
-            }
-          } else {
-            // Não tem metadata: considera não modificado (evita falsos positivos)
-            wasModified = false;
-            //  console.log(
-            //   `⚠️ Sem metadata para comparar: ${mapping.localPath} - ASSUMINDO NÃO MODIFICADO`
-            //  );
-          }
-
-          // Só adiciona se realmente foi modificado
-          if (wasModified) {
-            modifiedFiles.push({
-              fileName: path.basename(fullPath),
-              filePath: fullPath,
-              relativePath: mapping.localPath,
-              lastModified: stats.mtime,
-              hasLocalChanges: true,
-              status: FileStatus.Modified,
-              originalHash: mapping.contentHash,
-            });
-          }
-        } else {
-          // Arquivo foi deletado
-          modifiedFiles.push({
-            fileName: path.basename(mapping.localPath),
-            filePath: path.join(projectPath, mapping.localPath),
-            relativePath: mapping.localPath,
-            lastModified: new Date(),
-            hasLocalChanges: true,
-            status: FileStatus.Deleted,
-            originalHash: mapping.contentHash,
-          });
-        }
-      }
-
-      // Procura por novos arquivos que não estão no mapeamento
-      await this.findUnmappedFiles(
-        projectPath,
-        legacyMappedFiles,
-        modifiedFiles
-      );
-    } catch (error) {
-      console.error("❌ Erro ao encontrar arquivos modificados:", error);
-    }
-
-    return modifiedFiles;
-  }
-
-  /**
-   * Calcula hash SHA-256 do conteúdo do arquivo (considerando se é binário)
-   */
-  private async calculateFileHash(filePath: string): Promise<string> {
-    try {
-      // Detecta se é arquivo binário baseado na extensão
-      const extension = path.extname(filePath).toLowerCase();
-      const binaryExtensions = [
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".bmp",
-        ".ico",
-        ".svg",
-        ".woff",
-        ".woff2",
-        ".ttf",
-        ".otf",
-        ".eot",
-        ".pdf",
-        ".zip",
-        ".rar",
-        ".7z",
-        ".exe",
-        ".dll",
-        ".mp3",
-        ".mp4",
-        ".avi",
-        ".mov",
-        ".wav",
-      ];
-
-      const isBinary = binaryExtensions.includes(extension);
-
-      if (isBinary) {
-        // Para arquivos binários, usa estatísticas do arquivo (size + mtime) como "hash"
-        const stats = await fs.stat(filePath);
-        const hashInput = `${stats.size}-${stats.mtime.getTime()}`;
-        return crypto.createHash("sha256").update(hashInput).digest("hex");
-      } else {
-        // Para arquivos de texto, usa o conteúdo real
-        const content = await fs.readFile(filePath, "utf8");
-        return crypto.createHash("sha256").update(content).digest("hex");
-      }
-    } catch (error) {
-      console.error("❌ Erro ao calcular hash do arquivo:", error);
-      return "";
-    }
-  }
-
-  /**
-   * Registra arquivos do projeto no sistema de mapeamento JSON
-   */
-  private async registerProjectInMappingSystem(
-    projectPath: string,
-    remotePath: string,
-    mappingData: any
-  ): Promise<void> {
-    try {
-      if (!mappingData.mappings) return;
-
-      // console.log(`📋 Registrando ${mappingData.mappings.length} arquivos do projeto no sistema de mapeamento...`);
-
-      for (const mapping of mappingData.mappings) {
-        const localFilePath = path.join(projectPath, mapping.localPath);
-        const remoteFilePath =
-          mapping.remotePath ||
-          path.join(remotePath, mapping.localPath).replace(/\\/g, "/");
-
-        // Verifica se o arquivo existe no sistema de mapeamento
-        const existingFile = localFilesMappingManager.getFile(localFilePath);
-
-        if (!existingFile) {
-          // Arquivo não está no mapeamento, adiciona como "unchanged"
-          await localFilesMappingManager.addOrUpdateFile(
-            localFilePath,
-            remoteFilePath,
-            false, // não tem alterações inicialmente
-            "unchanged"
-          );
-        } else {
-          // console.log(`🔄 Arquivo já existe no mapeamento: ${path.basename(localFilePath)}`);
-        }
-      }
-
-      // console.log(`✅ Projeto registrado no sistema de mapeamento: ${path.basename(projectPath)}`);
-    } catch (error) {
-      console.error(
-        "❌ Erro ao registrar projeto no sistema de mapeamento:",
-        error
-      );
-    }
-  }
-
-  /**
-   * Encontra arquivos novos que ainda não estão no mapeamento
-   */
-  private async findUnmappedFiles(
-    projectPath: string,
-    mappedFiles: Map<string, any>,
-    modifiedFiles: ModifiedFile[]
-  ): Promise<void> {
-    try {
-      const allFiles = await this.getAllFiles(projectPath);
-
-      for (const filePath of allFiles) {
-        // Ignora arquivos do .miisync e outros arquivos especiais
-        if (
-          filePath.includes(".miisync") ||
-          filePath.includes(".git") ||
-          filePath.includes("node_modules")
-        ) {
-          continue;
-        }
-
-        const relativePath = path.relative(projectPath, filePath);
-
-        // Se o arquivo não está mapeado, é considerado novo
-        if (!mappedFiles.has(relativePath.toLowerCase())) {
-          const stats = await fs.stat(filePath);
-
-          modifiedFiles.push({
-            fileName: path.basename(filePath),
-            filePath: filePath,
-            relativePath: relativePath,
-            lastModified: stats.mtime,
-            hasLocalChanges: true,
-            status: FileStatus.Added,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("❌ Erro ao encontrar arquivos não mapeados:", error);
-    }
-  }
-
-  /**
-   * Obtém todos os arquivos de um diretório recursivamente
-   */
-  private async getAllFiles(dirPath: string): Promise<string[]> {
-    const files: string[] = [];
-
-    try {
-      const items = await fs.readdir(dirPath, { withFileTypes: true });
-
-      for (const item of items) {
-        const fullPath = path.join(dirPath, item.name);
-
-        if (item.isDirectory()) {
-          const subFiles = await this.getAllFiles(fullPath);
-          files.push(...subFiles);
-        } else {
-          files.push(fullPath);
-        }
-      }
-    } catch (error) {
-      // Ignora erros de acesso
-    }
-
-    return files;
   }
 
   /**

@@ -241,6 +241,20 @@
         "enablement": "miisync.enabled"
       },
       {
+        "command": "miisync.uploadallchanges",
+        "title": "Enviar Todas as Alterações",
+        "icon": "$(cloud-upload)",
+        "category": "mii",
+        "enablement": "miisync.enabled && miisync.loggedin"
+      },
+      {
+        "command": "miisync.uploadallchangeswithbkp",
+        "title": "Enviar Todas com Backup",
+        "icon": "$(versions)",
+        "category": "mii",
+        "enablement": "miisync.enabled && miisync.loggedin"
+      },
+      {
         "command": "miisync.uploadmodifiedfile",
         "title": "Upload Modified File",
         "icon": "$(arrow-up)",
@@ -597,6 +611,16 @@
           "command": "miisync.syncproject",
           "when": "view == projects && viewItem == project",
           "group": "inline@3"
+        },
+        {
+          "command": "miisync.uploadallchanges",
+          "when": "view == localprojects && viewItem == localproject",
+          "group": "inline@0"
+        },
+        {
+          "command": "miisync.uploadallchangeswithbkp",
+          "when": "view == localprojects && viewItem == localproject",
+          "group": "inline@1"
         },
         {
           "command": "miisync.uploadmodifiedfile",

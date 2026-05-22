@@ -51,6 +51,7 @@ import {
 } from "../commands/commandtrxexplorer";
 import { OnCommandUploadBroad } from "../commands/commanduploadbroad";
 import { OnCommandUploadModifiedFile } from "../commands/commanduploadmodifiedfile";
+import { OnCommandUploadAllChanges, OnCommandUploadAllChangesWithBkp } from "../commands/commanduploadallchanges";
 import { commandUploadWithBkp } from "../commands/commanduploadwithbkp";
 import { OnCommandUploadWithPath } from "../commands/commanduploadwithpath";
 import { OnCommandUploadWorkspace } from "../commands/commanduploadworkspace";
@@ -208,6 +209,8 @@ export function RegisterCommands(context: vscode.ExtensionContext) {
     OnCommandUploadModifiedFile,
     context
   );
+  RegisterCommand("miisync.uploadallchanges", OnCommandUploadAllChanges, context);
+  RegisterCommand("miisync.uploadallchangeswithbkp", OnCommandUploadAllChangesWithBkp, context);
   RegisterCommand("miisync.showfilediff", OnCommandShowFileDiff, context);
   RegisterCommand("miisync.verifyserver", OnCommandVerifyServer, context);
   RegisterCommand(
