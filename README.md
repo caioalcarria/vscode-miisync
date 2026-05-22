@@ -1,190 +1,181 @@
 # MII WEB SYNC
 
-**MII WEB SYNC** é um## ⚡ **Melhorias Implementadas**
-
-### **v0.14.1 - Versão Atual**
-
-- ✅ **Upload com Server Backup**: Backup automático antes de upload
-- ✅ **Download Resiliente**: Continua mesmo com arquivos problemáticos
-- ✅ **Menu Simplificado**: Comandos diretos no contexto (sem submenus)
-- ✅ **Sanitização de Caminhos**: Corrige caracteres especiais automaticamente
-- ✅ **Confirmações de Segurança**: Dupla confirmação para exclusões
-- ✅ **Mapeamento Inteligente**: Sistema robusto de path mapping
-- ✅ **Recuperação de Erros**: Não para downloads por arquivos únicos com problema
-
-## 📋 **Requisitos**
-
-- Visual Studio Code 1.83.1 ou superior
-- Servidor MII configurado e acessível
-- Arquivo `.vscode/miisync.json` para funcionalidades completas
-
-## ⚙️ **Configurações da Extensão**
-
-- **Session Duration**: Duração da sessão em minutos no sistema MII
-- **Refresh Session**: Renovar sessão automaticamente para evitar timeouts
-- **Request Limit**: Limite de requisições simultâneas (padrão: seguro para estabilidade)
-- **Show Diff Notification**: Notificar quando arquivo local difere do servidor
+Extensão VS Code para sincronização completa de projetos web com servidores **SAP MII** (Manufacturing Integration & Intelligence). Suporte a upload/download, controle de versão git integrado, editor visual de transações TRX e explorador de catálogo.
 
 ---
-
-## 📁 **Configuração do Projeto**
-
-Seu projeto deve conter o arquivo `miisync.json` na pasta `.vscode` para funcionar completamente.para Visual Studio Code que permite sincronização robusta e inteligente de projetos web com servidores MII. A extensão oferece recursos completos de backup, recuperação de download e mapeamento de caminhos.
 
 ## 🚀 Funcionalidades Principais
 
-### 📁 **Gestão de Arquivos e Pastas**
+### 📁 Gestão de Arquivos (Web e Catálogo)
 
-- **Upload com Backup do Servidor**: Antes de fazer upload, cria automaticamente um backup do arquivo existente no servidor
-- **Download Robusto**: Sistema de download que continua mesmo quando alguns arquivos falham (não para mais aos 94%)
-- **Sanitização de Caminhos**: Corrige automaticamente nomes de arquivos com caracteres especiais incompatíveis com Windows
-- **Detecção Binária Inteligente**: Detecta automaticamente arquivos binários vs texto baseado na extensão
+- **Upload/Download** de arquivos e pastas para o servidor MII
+- **Detecção automática** de arquivos Web (`/WEB/`) vs Catálogo (TRX/queries) — serviços corretos para cada tipo
+- **Upload com Backup do Servidor**: cria cópia `_BKP_data_hora` no servidor antes de substituir
+- **Upload em massa**: envia todas as alterações de um projeto de uma vez, com ou sem backup
+- **Sanitização de caminhos**: trata caracteres especiais incompatíveis com Windows automaticamente
+- **Detecção binária**: diferencia arquivos de texto e binários por extensão
 
-### 🔄 **Sincronização Avançada**
+### 🔄 Sincronização e Projetos Locais
 
-- **Mapeamento de Caminhos**: Sistema completo de mapeamento entre caminhos locais e remotos
-- **Verificação de Integridade**: Verifica se arquivos foram modificados por outros usuários
-- **Recuperação de Erros**: Continua downloads mesmo quando arquivos específicos falham (ENOENT, caracteres inválidos, etc.)
+- **Aba Local Changes**: lista projetos baixados com arquivos modificados, categorizado por **Web** e **Catalog — TRX & Queries**
+- **Detecção via Git**: se o projeto tiver `.git/`, usa `git status` como fonte de verdade (zero falsos positivos)
+- **Aba Projects**: visão de todos os projetos locais, também categorizada por Web e Catalog
+- **Sync Project**: re-baixa todo o projeto do servidor com substituição segura (overwrite in-place, sem EPERM)
+  - Detecta e pergunta sobre alterações locais não commitadas antes de sincronizar
+  - Opções: salvar em git, salvar em git + subir ao servidor, ignorar ou cancelar
+  - Botões inline: `Sync com git` / `Sync sem git`
 
-### 🛡️ **Segurança e Confirmações**
+### 🌿 Integração Git
 
-- **Confirmação Dupla para Exclusões**: Mostra o caminho completo do servidor antes de deletar
-- **Backup Automático**: Cria backups com timestamp antes de sobrescrever arquivos
-- **Validação de Sessão**: Renovação automática de sessão para evitar timeouts
+- **Auto-init**: ao baixar um projeto, cria repositório git automaticamente com commit baseline
+- **`.gitignore` inteligente**: exclui `.miisync/`, `*_BKP_*`, `*.log`, `*.tmp`, `Thumbs.db`, `node_modules/`, `.vscode/`
+- **Commit após upload**: pergunta se deseja registrar o upload no git (com memória de escolha — ✓ lembrado / Sempre / Nunca mais)
+- **Commit após sync**: idem para sincronizações
+- **Pre-sync check**: detecta alterações não commitadas e oferece ações antes do sync
+- **Configuração `gitCommitOnUpload`**: `ask` (padrão) | `always` | `disabled`
 
-## 📋 **Como Usar**
+### 🗂️ TRX & Queries Explorer
 
-### Primeira Configuração:
+- **Explorador dedicado** de transações e queries no catálogo MII (aba dentro do MiiSync)
+- **Caminho raiz configurável** (padrão: raiz do catálogo)
+- **Abrir do servidor**: abre `.trx` ou `.qmf` como arquivo temporário para edição
+- **Upload direto** do arquivo temporário de volta ao servidor (com ou sem backup)
+- **Baixar como projeto**: transforma pasta do catálogo em projeto local rastreado
 
-1. Instale e ative a extensão
-2. Use `Ctrl+Shift+P` → Digite `mii: create config`
-3. Configure o arquivo `miisync.json` criado
-4. Defina `isMain: true` para o sistema principal
+### 📊 TRX Viewer (Editor Visual)
 
-### Comandos Principais:
+- **Editor custom** para arquivos `.trx` — abre automaticamente ao clicar em `.trx`
+- **Diagrama interativo**: visualiza sequences, actions, branches true/false com conexões SVG
+- **Abas**: Diagrama | Variáveis | Informações
+- **Sidebar de actions**: catálogo carregado do servidor, filtrável, com ícones por tipo
+- **Edição visual**: adicionar/remover sequences e actions diretamente no diagrama
+- **Links**: popup mostrando incoming/outgoing links de cada action
 
-- **Botão direito em arquivos/pastas** → Acesso direto aos comandos MiiSync
-- **Upload with Server Backup** → Upload com backup automático
-- **Download Project** → Download completo com recuperação de erros
-- **Show Server Differences** → Visualiza diferenças com servidor
-- **Copy Server Path** → Copia caminho do servidor
+### 🔐 Autenticação e Sistemas
 
-### Menu Simplificado:
-
-Todos os comandos MiiSync agora aparecem diretamente no menu de contexto (sem submenus), facilitando o acesso rápido.
-
-## Planned Features
-
-## Requirements
-
-- Visual Studio Code.
-- MII system to connect to.
-- .vscode/miisync.json file for full features.
-
-## Extension Settings
-
-- `Session Duration`: How long does session lasts in minutes in the MII system.
-- `Refresh Session`: Should extension perodically send request to renew session?
-- `Request Limit`: The maximum number of requests to server it can send. Used in folder download/upload/transfer. Increasing it can introduce instability.
-- `Show Diff Notification`: Should the extension see if the currently opened file is different from the remote file and show a notification if it is?
+- **Multi-sistema**: suporte a vários servidores MII com severidade configurável (low/medium/high/critical)
+- **Sistema principal** (isMain) como alvo padrão de operações
+- **Sessão persistente**: cookies salvos, refresh automático configurável
+- **Transfer**: copia arquivos de um sistema para outro
 
 ---
 
-Your folder must contain miisync.json file in .vscode folder to work.
+## 📋 Requisitos
 
-### **Configurações do miisync.json:**
+- Visual Studio Code 1.83.1 ou superior
+- Servidor MII configurado e acessível
+- Arquivo `.vscode/miisync.json` no workspace
+- **Git** instalado (opcional, mas recomendado para rastreamento de mudanças)
+
+---
+
+## ⚙️ Configuração
+
+### miisync.json (`.vscode/miisync.json`)
 
 ```json
 {
-  "system": [
+  "systems": [
     {
-      "name": "Servidor Principal",
-      "isMain": true,
-      "severity": 2,
-      "host": "meu-servidor.com",
+      "name": "dev",
+      "host": "10.20.30.40",
       "port": 50000,
-      "username": "meu-usuario",
-      "password": "opcional"
+      "protocol": "http",
+      "username": "user",
+      "password": "pass",
+      "isMain": true,
+      "severity": "1-medium"
     }
   ],
-  "remotePath": "PROJETO/WEB/MeuApp",
+  "remotePath": "Default",
   "removeFromLocalPath": ["webapp"],
-  "ignore": ["node_modules/**", "*.log"],
-  "include": ["src/**"],
-  "uploadOnSave": true,
+  "uploadOnSave": false,
   "downloadOnOpen": false,
-  "useRootConfig": false,
-  "rootConfig": ""
+  "ignore": ["package.json", ".*"]
 }
 ```
 
-**Parâmetros Principais:**
+### Configurações da Extensão (`miisync.settings.*`)
 
-- **`system`**: Array de sistemas MII (apenas um com `isMain: true`)
-- **`remotePath`**: Caminho do projeto no servidor (ex: "PROJETO/WEB/App")
-- **`removeFromLocalPath`**: Pastas locais que não existem no servidor
-- **`ignore/include`**: Padrões glob para filtrar arquivos
-- **`uploadOnSave`**: Upload automático ao salvar
-- **`downloadOnOpen`**: Download automático ao abrir
-
-## 🎮 **Comandos Disponíveis**
-
-### **Via Command Palette (Ctrl+Shift+P):**
-
-- `mii: Create Config` - Cria arquivo de configuração (primeiro comando)
-- `mii: Log in/out` - Gerencia sessão no servidor
-- `mii: Upload Changes` - Faz upload de arquivos modificados
-- `mii: Toggle Upload/Download` - Liga/desliga funcionalidades automáticas
-
-### **Menu de Contexto (Botão Direito):**
-
-- 📥 **Download** - Baixa arquivo/pasta do servidor
-- 📤 **Upload** - Envia arquivo/pasta para servidor
-- 📤 **Upload with Server Backup** - Upload com backup automático
-- 🔄 **Transfer** - Transfere entre sistemas
-- 🗑️ **Delete** - Remove do servidor (com confirmação dupla)
-- 📋 **Copy Server Path** - Copia caminho do servidor
-- 🔍 **Show Server Differences** - Mostra diferenças
-- ⚙️ **Open Screen** - Abre tela no navegador (index.html)
-
-### **Sidebar MiiSync:**
-
-- 🌐 **Remote Directory** - Navega arquivos do servidor
-- 📁 **Local Projects** - Gerencia projetos locais
-- ⚙️ **Settings** - Abre configurações
-
-## 🛠️ **Solução de Problemas**
-
-### **Downloads que Param aos 94%:**
-
-✅ **Solucionado!** A extensão agora continua o download mesmo quando alguns arquivos falham
-
-### **Caracteres Especiais em Nomes:**
-
-✅ **Solucionado!** Sanitização automática de caminhos problemáticos
-
-### **Arquivos Não Encontrados (ENOENT):**
-
-✅ **Solucionado!** Sistema ignora arquivos problemáticos e continua
+| Configuração | Padrão | Descrição |
+|---|---|---|
+| `sessionDuration` | 60 | Duração da sessão em minutos |
+| `refreshSession` | true | Renovar sessão automaticamente |
+| `requestLimit` | 40 | Limite de requisições simultâneas |
+| `showDiffNotification` | true | Notificar quando arquivo difere do servidor |
+| `gitCommitOnUpload` | `ask` | Commit git após upload: `ask` \| `always` \| `disabled` |
 
 ---
 
-## 📝 **Changelog Recente**
+## 🗺️ Abas da Sidebar
 
-**v0.14.1:**
+| Aba | Descrição |
+|---|---|
+| **Remote Directory** | Navega o sistema de arquivos do servidor MII |
+| **Local Changes** | Projetos locais com arquivos modificados (Web / Catalog) |
+| **Projects** | Todos os projetos baixados (Web / Catalog) |
+| **TRX & Queries** | Explorador do catálogo MII (TRX, queries, runners) |
+| **MiiSync Configurações** | Painel de configurações com webview |
 
-- 🆕 Upload with Server Backup
-- 🔧 Download recovery system
-- 🎨 Menu simplification
-- 🛡️ Enhanced error handling
-- 📁 Path sanitization system
+---
 
-* `Download Remote Folder`: Downloads the selected remote folder and its contents.
-* `Download Remote File`: Downloads the selected remote file.
-* `Download File Properties`: Downloads the file properties like created time, updated user.
+## 🔧 Comandos Principais
 
-## Known Issues
+| Comando | Descrição |
+|---|---|
+| `mii: Login` | Autenticar no servidor MII |
+| `mii: Upload` | Upload do arquivo ativo |
+| `mii: Upload with Server Backup` | Upload com backup automático no servidor |
+| `mii: Download` | Download do arquivo ativo |
+| `mii: Sync Project` | Re-sincroniza projeto completo do servidor |
+| `mii: Upload All Changes` | Envia todas as alterações do projeto de uma vez |
+| `mii: Upload All with Backup` | Idem com backup de cada arquivo |
+| `mii: Switch System` | Trocar sistema MII ativo |
 
--
+---
 
-**Enjoy!**
+## 🌿 Fluxo Git Recomendado
+
+```
+1. Baixar projeto (Remote Directory → Download as Project)
+   └─ git init automático + commit "sync: download inicial"
+
+2. Editar arquivos localmente
+   └─ git status mostra exatamente o que mudou
+
+3. Upload individual (botão ↑ no arquivo) ou em massa (botão ⬆ no projeto)
+   └─ pergunta se quer registrar no git (com memória de escolha)
+
+4. Quando servidor atualiza:
+   └─ Sync Project → "Sync com git" → commit "sync: servidor → local"
+   └─ git log mostra histórico completo de sincronizações e uploads
+```
+
+---
+
+## 📁 Estrutura de Metadados Local
+
+Cada projeto baixado cria uma pasta `.miisync/` com:
+
+```
+.miisync/
+└── path-mapping.json   → mapeamento local→remoto + hash baseline
+```
+
+O arquivo `.gitignore` gerado automaticamente exclui `.miisync/` do rastreamento git.
+
+---
+
+## 🛣️ Roadmap
+
+- [ ] **MCP Server**: exposição das ferramentas MII para agentes AI (Claude Code, etc.)
+- [ ] **TRX Builder AI**: construção assistida de transações via agente
+- [ ] **Fixed Query Builder**: criação e teste de queries via agente
+- [ ] **MII Workbench Runner**: execução de testes de transações
+- [ ] **AI Chat no TRX Viewer**: assistente integrado ao editor visual
+
+---
+
+## 📄 Licença
+
+MIT — baseado no projeto original de [TaBayram](https://github.com/TaBayram/vscode-miisync), com extensas melhorias por caioalcarria.

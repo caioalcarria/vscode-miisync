@@ -1,0 +1,184 @@
+================================================================================
+  PLANO: INTEGRAÇÃO DE AGENTES AI PARA CONSTRUÇÃO DE TRX NO SAP MII
+  Extensão: MII WEB SYNC (vscode-miisync)
+  Data: 2026-05-21
+================================================================================
+
+OBJETIVO
+--------
+Permitir que agentes AI (ex: Claude Code) construam transações (.trx),
+fixed queries e rodem testes do MII Workbench diretamente pela extensão,
+com contexto completo sobre actions disponíveis, esquema XML e links.
+
+
+FASE 1 — CONTEXTO PARA O AGENTE (base de tudo)
+------------------------------------------------
+Sem contexto o agente não sabe construir nada.
+
+1.1  src/ai/trx-schema.ts
+     Documento estruturado (JSON/Markdown interno) descrevendo:
+     - Estrutura XML completa de um .trx
+     - Tipos de Step: ActionSequence, Conditional, ForNext, While, Iterator, Catch
+     - Como montar <Actions> dentro de cada sequence
+     - Links: IncomingLinks / OutgoingLinks / Assign (From → To)
+     - Variáveis <Context> (I/O externo) e <Local> (uso interno)
+     - Regras de naming e tipos de dados do MII
+     - Atributos obrigatórios e opcionais de cada elemento
+
+1.2  Catálogo de actions enriquecido
+     O catalogService já carrega o XML. Criar ferramenta que retorna:
+     {
+       "category": "SAP",
+       "action": "SAPJCOFunction",
+       "description": "Chama função BAPI no SAP via JCO",
+       "inputLinks": ["FunctionName", "..."],
+       "outputLinks": ["Output", "ReturnValue", "..."]
+     }
+     Requer inspecionar o schema do catálogo e/ou documentar as actions comuns.
+
+1.3  src/ai/trx-examples.ts
+     TRX de exemplo comentados (como referência para o agente):
+     - JCO call simples
+     - SQL query + loop com Iterator
+     - TransactionCall com passagem de parâmetros
+     - Conditional com branches true/false
+     - Try/Catch com ExceptionEnabler
+
+
+FASE 2 — MCP SERVER DENTRO DA EXTENSÃO (peça central)
+------------------------------------------------------
+A extensão expõe um MCP Server local. Claude Code (e outros agentes)
+o consomem via configuração no .claude/settings.json.
+
+  Extension VS Code
+       │
+       └─ MCP Server HTTP (porta configurável, padrão: 3722)
+               │
+               ├─ tool: mii_get_catalog        → lista actions disponíveis do servidor
+               ├─ tool: mii_read_trx           → lê .trx do servidor MII
+               ├─ tool: mii_write_trx          → salva .trx no servidor MII
+               ├─ tool: mii_validate_trx       → valida estrutura XML localmente
+               ├─ tool: mii_execute_trx        → executa TRX e retorna output
+               ├─ tool: mii_list_files         → lista .trx / .qmf em um path
+               ├─ tool: mii_create_query       → cria fixed query (.qmf)
+               ├─ tool: mii_test_query         → executa query e retorna preview (N rows)
+               └─ tool: mii_run_transaction    → roda com params de teste, retorna variáveis
+
+Arquivos:
+  src/mcp/mcpserver.ts       — servidor HTTP + roteador de tools
+  src/mcp/toolhandlers.ts    — implementação de cada tool
+  src/mcp/mcpschemas.ts      — schemas JSON de input/output de cada tool
+
+Configuração no Claude Code (.claude/settings.json):
+  {
+    "mcpServers": {
+      "miisync": {
+        "type": "http",
+        "url": "http://localhost:3722"
+      }
+    }
+  }
+
+A extensão sobe o servidor no activate() e derruba no deactivate().
+
+
+FASE 3 — TRX BUILDER API (construção programática)
+---------------------------------------------------
+API de alto nível que constrói XML válido sem manipulação manual.
+
+  src/ai/trxbuilder.ts
+
+  Exemplo de uso pelo agente:
+    const builder = new TrxBuilder("ConsultaMaterial");
+    builder.addContextVar("MaterialNumber", "String");   // input
+    builder.addContextVar("Description", "String");      // output
+    builder.addLocalVar("JCOResult", "XML");
+
+    const seq = builder.addSequence("MainSeq");
+    const jco = seq.addAction("JCOCall", "SAPJCOFunction");
+    jco.setParam("FunctionName", "BAPI_MATERIAL_GET_DETAIL");
+    jco.setLink("FunctionName", "Context.MaterialNumber");
+
+    const assign = seq.addAction("SetDesc", "Assignment");
+    assign.setLink("Context.Description", "JCOCall.Output.BasicData.Matl_Desc");
+
+    const xml = builder.build(); // → XML .trx válido
+
+O MCP Server usa esta API internamente para mii_create_trx e mii_add_action.
+
+
+FASE 4 — FIXED QUERIES
+-----------------------
+  src/ai/querybuilder.ts
+
+  Tipos suportados:
+  - IlluminatorSQLQueryObject  → SQL direto
+  - IlluminatorTagQueryObject  → tag-based
+  - IlluminatorMDOQueryObject  → MDO
+
+  MCP tools:
+  - mii_create_sql_query  → cria .qmf com SQL
+  - mii_test_query        → executa e retorna até N rows (preview)
+
+
+FASE 5 — TESTES (MII Workbench runner)
+---------------------------------------
+MII tem endpoint próprio para execução com parâmetros:
+
+  POST /XMII/Runner
+  Body: Transaction=Default/Path/MyTrx.trx
+        &Context.Param1=value
+        &OutputParameter=XML
+
+  src/miiservice/runnerservice.ts
+  - Implementar RunnerService com Mode=Runner
+  - Parsear output XML e retornar variáveis de saída de forma legível
+
+  MCP tools:
+  - mii_run_transaction  → executa com { path, inputParams } → retorna { outputs }
+
+
+FASE 6 — INTEGRAÇÃO NO TRX VIEWER (UX final)
+---------------------------------------------
+  No viewer .trx existente, adicionar painel "AI Assistant":
+  - Input de chat para descrever o que quer construir
+  - Agente responde usando os MCP tools do servidor local
+  - Mudanças aplicadas diretamente no diagrama em tempo real
+  - Sugestões de próximos passos (ex: "falta configurar os links do JCO")
+
+
+ORDEM DE IMPLEMENTAÇÃO RECOMENDADA
+------------------------------------
+  Semana 1:  Fase 1 (trx-schema.ts + trx-examples.ts)
+  Semana 2:  Fase 2 (MCP Server + tools básicos: get_catalog, read/write trx)
+  Semana 3:  Fase 3 (TrxBuilder + mii_create_trx, mii_add_action)
+  Semana 4:  Fase 5 (RunnerService + mii_run_transaction)
+  Semana 5:  Fase 4 (QueryBuilder + query tools)
+  Semana 6+: Fase 6 (AI chat no viewer)
+
+
+FLUXO COMPLETO ESPERADO (depois de tudo implementado)
+------------------------------------------------------
+  Prompt do usuário ao agente:
+    "Crie uma TRX que recebe MaterialNumber, chama BAPI_MATERIAL_GET_DETAIL
+     via JCO e retorna Description e Plant"
+
+  O agente:
+    1. Chama mii_get_catalog → identifica SAPJCOInterface + SAPJCOFunction
+    2. Consulta trx-schema para saber como montar sequences e links
+    3. Usa TrxBuilder para construir o XML
+    4. Chama mii_write_trx para salvar no servidor
+    5. Chama mii_run_transaction com MaterialNumber="MAT001"
+    6. Retorna o resultado para o usuário com output de Description e Plant
+
+
+DEPENDÊNCIAS TÉCNICAS
+---------------------
+  - MCP protocol: JSON-RPC 2.0 sobre HTTP (sem dependências novas, só Node.js)
+  - TrxBuilder: manipulação de XML com fast-xml-parser (já disponível)
+  - RunnerService: fetch padrão (já disponível no projeto)
+  - MCP config: .claude/settings.json do Claude Code
+
+================================================================================
+  FIM DO PLANO
+================================================================================
