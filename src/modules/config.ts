@@ -45,7 +45,16 @@ function GetWorkspaceConfig(): UserConfig {
         ignore: conf.get('ignore', ['package.json', '.*']),
         include: conf.get('include', []),
         useRootConfig: conf.get('useRootConfig', false),
-        rootConfig: conf.get('rootConfig', '')
+        rootConfig: conf.get('rootConfig', ''),
+        mcp: {
+            enabled: false,
+            clients: {
+                claudeCode: false,
+                geminiCLI: false,
+                copilotCLI: false,
+                copilotVSCode: false,
+            }
+        }
     };
 }
 

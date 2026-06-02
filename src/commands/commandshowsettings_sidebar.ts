@@ -142,6 +142,15 @@ function getDefaultConfig(): any {
     include: [],
     useRootConfig: false,
     rootConfig: "",
+    mcp: {
+      enabled: false,
+      clients: {
+        claudeCode: false,
+        geminiCLI: false,
+        copilotCLI: false,
+        copilotVSCode: false,
+      },
+    },
   };
 }
 
@@ -827,9 +836,92 @@ function getSettingsSidebarHTML(config: any): string {
 
                                 <div class="form-group">
                                     <label class="form-label">Caminho da Configuração Raiz</label>
-                                    <input type="text" class="form-input" id="rootConfig" 
-                                           value="${config.rootConfig || ""}" 
+                                    <input type="text" class="form-input" id="rootConfig"
+                                           value="${config.rootConfig || ""}"
                                            placeholder="../miisync.json">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SEÇÃO MCP / AI TOOLS -->
+                    <div class="section">
+                        <div class="section-header" onclick="toggleSection(this)">
+                            <div class="section-title">
+                                <span class="section-icon">🤖</span>
+                                MCP / AI Tools
+                            </div>
+                            <span class="chevron">▶</span>
+                        </div>
+                        <div class="section-content">
+                            <div class="section-body">
+                                <div class="toggle-container">
+                                    <div class="toggle-info">
+                                        <div class="toggle-title">Habilitar MCP Server</div>
+                                        <div class="toggle-desc">Expõe as funcionalidades do MiiSync como tools para agentes de IA (Claude, Gemini, Copilot)</div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="mcpEnabled" ${
+                                          config.mcp?.enabled ? "checked" : ""
+                                        }>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+
+                                <div style="margin-top:12px; margin-bottom:8px; font-size:0.8rem; color:#9d9d9d; text-transform:uppercase; letter-spacing:0.5px;">
+                                    Gerar config para:
+                                </div>
+
+                                <div class="toggle-container">
+                                    <div class="toggle-info">
+                                        <div class="toggle-title">Claude Code</div>
+                                        <div class="toggle-desc">Escreve .claude/settings.json no projeto</div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="mcpClaudeCode" ${
+                                          config.mcp?.clients?.claudeCode ? "checked" : ""
+                                        }>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+
+                                <div class="toggle-container">
+                                    <div class="toggle-info">
+                                        <div class="toggle-title">Gemini CLI</div>
+                                        <div class="toggle-desc">Escreve .gemini/settings.json no projeto</div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="mcpGeminiCLI" ${
+                                          config.mcp?.clients?.geminiCLI ? "checked" : ""
+                                        }>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+
+                                <div class="toggle-container">
+                                    <div class="toggle-info">
+                                        <div class="toggle-title">Copilot CLI</div>
+                                        <div class="toggle-desc">Suporte experimental ao gh copilot</div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="mcpCopilotCLI" ${
+                                          config.mcp?.clients?.copilotCLI ? "checked" : ""
+                                        }>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+
+                                <div class="toggle-container">
+                                    <div class="toggle-info">
+                                        <div class="toggle-title">Copilot no VS Code</div>
+                                        <div class="toggle-desc">Ativo automaticamente via contributes.mcpServers — não gera arquivo extra</div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="mcpCopilotVSCode" ${
+                                          config.mcp?.clients?.copilotVSCode ? "checked" : ""
+                                        }>
+                                        <span class="slider"></span>
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -889,7 +981,16 @@ function getSettingsSidebarHTML(config: any): string {
                     include: document.getElementById('includePatterns').value
                         .split('\\n').map(s => s.trim()).filter(s => s.length > 0),
                     useRootConfig: document.getElementById('useRootConfig').checked,
-                    rootConfig: document.getElementById('rootConfig').value
+                    rootConfig: document.getElementById('rootConfig').value,
+                    mcp: {
+                        enabled: document.getElementById('mcpEnabled').checked,
+                        clients: {
+                            claudeCode: document.getElementById('mcpClaudeCode').checked,
+                            geminiCLI: document.getElementById('mcpGeminiCLI').checked,
+                            copilotCLI: document.getElementById('mcpCopilotCLI').checked,
+                            copilotVSCode: document.getElementById('mcpCopilotVSCode').checked,
+                        }
+                    }
                 };
 
                 vscode.postMessage({

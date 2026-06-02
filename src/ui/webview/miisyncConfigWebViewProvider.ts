@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { writeMcpClientConfigs } from '../../mcp/mcpWriter';
 
 export class MiiSyncConfigWebViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'miisyncconfig-settings';
@@ -391,6 +392,137 @@ export class MiiSyncConfigWebViewProvider implements vscode.WebviewViewProvider 
             </div>
         </div>
 
+        <div class="section">
+            <div class="section-header">
+                <span class="icon">🤖</span>
+                MCP / AI Tools
+            </div>
+            <div class="section-content">
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <div>
+                            <label>Habilitar MCP Server</label>
+                            <div class="description">Expõe o MiiSync como ferramentas para agentes de IA</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="mcp-enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Gerar configuração para:</label>
+                </div>
+
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <div>
+                            <label>Claude Code</label>
+                            <div class="description">Escreve .mcp.json na raiz do projeto</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="mcp-claude">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <div>
+                            <label>Gemini CLI</label>
+                            <div class="description">Escreve .gemini/settings.json</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="mcp-gemini">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <div>
+                            <label>Copilot CLI</label>
+                            <div class="description">Suporte experimental</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="mcp-copilot-cli">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <div>
+                            <label>Copilot no VS Code</label>
+                            <div class="description">Automático via extensão</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="mcp-copilot-vscode">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top:16px; border-top:1px solid #3c3c3c; padding-top:12px;">
+                    <label>🔒 Política de Segurança</label>
+                    <div class="description">Controla o que o agente pode fazer. Quanto mais restrito, mais seguro.</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="mcp-mode">Modo</label>
+                    <select id="mcp-mode" class="severity-select">
+                        <option value="readonly">readonly — só leitura (mais seguro)</option>
+                        <option value="write">write — cria/edita arquivos</option>
+                        <option value="full">full — tudo conforme flags</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <div><label>Permitir DELETE</label><div class="description">Apagar arquivos (sempre com token + backup)</div></div>
+                        <label class="toggle-switch"><input type="checkbox" id="mcp-allow-delete"><span class="slider"></span></label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <div><label>Permitir SQL write</label><div class="description">INSERT/UPDATE/DELETE no tqsq_run_adhoc</div></div>
+                        <label class="toggle-switch"><input type="checkbox" id="mcp-allow-sqlwrite"><span class="slider"></span></label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <div><label>Permitir SQL DDL</label><div class="description">DROP/ALTER/TRUNCATE (raro)</div></div>
+                        <label class="toggle-switch"><input type="checkbox" id="mcp-allow-sqlddl"><span class="slider"></span></label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="toggle-group">
+                        <div><label>Permitir executar TRX</label><div class="description">trx_run (sem token, auditado)</div></div>
+                        <label class="toggle-switch"><input type="checkbox" id="mcp-allow-trxrun" checked><span class="slider"></span></label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="mcp-protected">Caminhos protegidos</label>
+                    <textarea id="mcp-protected" placeholder="Default/PROD/**&#10;**/core/**"></textarea>
+                    <div class="description">Globs onde escrita/delete são negados (um por linha)</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="mcp-git">Git no upload</label>
+                    <select id="mcp-git" class="severity-select">
+                        <option value="inherit">inherit — usa gitCommitOnUpload</option>
+                        <option value="always">always — commita sempre</option>
+                        <option value="disabled">disabled — não commita</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
         <button class="button save-button" onclick="saveConfiguration()">
             💾 Salvar Configurações
         </button>
@@ -428,12 +560,30 @@ export class MiiSyncConfigWebViewProvider implements vscode.WebviewViewProvider 
                 ignore: document.getElementById('ignore-patterns').value.split('\\n').filter(p => p.trim()),
                 include: document.getElementById('include-patterns').value.split('\\n').filter(p => p.trim()),
                 useRootConfig: document.getElementById('use-root-config').checked,
-                rootConfig: document.getElementById('root-config').value || ''
+                rootConfig: document.getElementById('root-config').value || '',
+                mcp: {
+                    enabled: document.getElementById('mcp-enabled').checked,
+                    clients: {
+                        claudeCode: document.getElementById('mcp-claude').checked,
+                        geminiCLI: document.getElementById('mcp-gemini').checked,
+                        copilotCLI: document.getElementById('mcp-copilot-cli').checked,
+                        copilotVSCode: document.getElementById('mcp-copilot-vscode').checked
+                    },
+                    policy: {
+                        mode: document.getElementById('mcp-mode').value,
+                        allowDelete: document.getElementById('mcp-allow-delete').checked,
+                        allowSqlWrite: document.getElementById('mcp-allow-sqlwrite').checked,
+                        allowSqlDDL: document.getElementById('mcp-allow-sqlddl').checked,
+                        allowTrxRun: document.getElementById('mcp-allow-trxrun').checked,
+                        protectedPaths: document.getElementById('mcp-protected').value.split('\\n').filter(p => p.trim()),
+                        git: document.getElementById('mcp-git').value
+                    }
+                }
             };
 
-            vscode.postMessage({ 
-                type: 'saveConfig', 
-                config: config 
+            vscode.postMessage({
+                type: 'saveConfig',
+                config: config
             });
 
             showStatusMessage();
@@ -473,6 +623,25 @@ export class MiiSyncConfigWebViewProvider implements vscode.WebviewViewProvider 
             document.getElementById('include-patterns').value = (config.include || []).join('\\n');
             document.getElementById('ignore-patterns').value = (config.ignore || []).join('\\n');
             document.getElementById('remove-patterns').value = (config.removeFromLocalPath || []).join('\\n');
+
+            // MCP / AI Tools
+            const mcp = config.mcp || {};
+            const mcpClients = mcp.clients || {};
+            document.getElementById('mcp-enabled').checked = mcp.enabled || false;
+            document.getElementById('mcp-claude').checked = mcpClients.claudeCode || false;
+            document.getElementById('mcp-gemini').checked = mcpClients.geminiCLI || false;
+            document.getElementById('mcp-copilot-cli').checked = mcpClients.copilotCLI || false;
+            document.getElementById('mcp-copilot-vscode').checked = mcpClients.copilotVSCode || false;
+
+            // MCP Policy
+            const pol = mcp.policy || {};
+            document.getElementById('mcp-mode').value = pol.mode || 'readonly';
+            document.getElementById('mcp-allow-delete').checked = pol.allowDelete || false;
+            document.getElementById('mcp-allow-sqlwrite').checked = pol.allowSqlWrite || false;
+            document.getElementById('mcp-allow-sqlddl').checked = pol.allowSqlDDL || false;
+            document.getElementById('mcp-allow-trxrun').checked = pol.allowTrxRun !== false;
+            document.getElementById('mcp-protected').value = (pol.protectedPaths || []).join('\\n');
+            document.getElementById('mcp-git').value = pol.git || 'inherit';
         }
 
         // Listener para mensagens do VS Code
@@ -540,6 +709,16 @@ export class MiiSyncConfigWebViewProvider implements vscode.WebviewViewProvider 
 
             // Salvar configuração
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+            // Se MCP habilitado, gera/atualiza os arquivos de config dos clientes de IA
+            if (config?.mcp?.enabled) {
+                await writeMcpClientConfigs(
+                    workspaceFolder.uri.fsPath,
+                    config.mcp.clients || {},
+                    this._extensionUri.fsPath,
+                    config.mcp
+                );
+            }
 
             this._view?.webview.postMessage({
                 type: 'configSaved'

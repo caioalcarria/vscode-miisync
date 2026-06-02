@@ -29,6 +29,7 @@ export class MiiSyncConfigProvider implements vscode.TreeDataProvider<ConfigItem
                 new ConfigItem('⚙️ Comportamento', 'behavior', vscode.TreeItemCollapsibleState.Collapsed),
                 new ConfigItem('📁 Filtros', 'filters', vscode.TreeItemCollapsibleState.Collapsed),
                 new ConfigItem('🔧 Avançado', 'advanced', vscode.TreeItemCollapsibleState.Collapsed),
+                new ConfigItem('🤖 MCP / AI Tools', 'mcp', vscode.TreeItemCollapsibleState.Collapsed),
                 new ConfigItem('💾 Ações', 'actions', vscode.TreeItemCollapsibleState.Expanded)
             ]);
         } else {
@@ -76,6 +77,19 @@ export class MiiSyncConfigProvider implements vscode.TreeDataProvider<ConfigItem
                     new ConfigItem(`📁 Caminho Raiz: ${this.config.rootConfig || 'Não configurado'}`, 'edit-root-config-path', vscode.TreeItemCollapsibleState.None)
                 );
                 break;
+
+            case 'mcp': {
+                const mcp = this.config.mcp || {};
+                const clients = mcp.clients || {};
+                items.push(
+                    new ConfigItem(`🤖 MCP Server: ${mcp.enabled ? 'Ativo' : 'Inativo'}`, 'toggle-mcp-enabled', vscode.TreeItemCollapsibleState.None),
+                    new ConfigItem(`  Claude Code: ${clients.claudeCode ? '✅' : '○'}`, 'toggle-mcp-claude', vscode.TreeItemCollapsibleState.None),
+                    new ConfigItem(`  Gemini CLI: ${clients.geminiCLI ? '✅' : '○'}`, 'toggle-mcp-gemini', vscode.TreeItemCollapsibleState.None),
+                    new ConfigItem(`  Copilot CLI: ${clients.copilotCLI ? '✅' : '○'}`, 'toggle-mcp-copilot-cli', vscode.TreeItemCollapsibleState.None),
+                    new ConfigItem(`  Copilot VS Code: ${clients.copilotVSCode ? '✅' : '○'}`, 'toggle-mcp-copilot-vscode', vscode.TreeItemCollapsibleState.None),
+                );
+                break;
+            }
                 
             case 'actions':
                 items.push(
@@ -148,7 +162,16 @@ export class MiiSyncConfigProvider implements vscode.TreeDataProvider<ConfigItem
             ],
             include: [],
             useRootConfig: false,
-            rootConfig: ""
+            rootConfig: "",
+            mcp: {
+                enabled: false,
+                clients: {
+                    claudeCode: false,
+                    geminiCLI: false,
+                    copilotCLI: false,
+                    copilotVSCode: false,
+                }
+            }
         };
     }
 
@@ -212,6 +235,22 @@ export class MiiSyncConfigProvider implements vscode.TreeDataProvider<ConfigItem
                 break;
             case 'toggle-root-config':
                 await this.toggleField('useRootConfig');
+                break;
+
+            case 'toggle-mcp-enabled':
+                await this.toggleField('mcp.enabled');
+                break;
+            case 'toggle-mcp-claude':
+                await this.toggleField('mcp.clients.claudeCode');
+                break;
+            case 'toggle-mcp-gemini':
+                await this.toggleField('mcp.clients.geminiCLI');
+                break;
+            case 'toggle-mcp-copilot-cli':
+                await this.toggleField('mcp.clients.copilotCLI');
+                break;
+            case 'toggle-mcp-copilot-vscode':
+                await this.toggleField('mcp.clients.copilotVSCode');
                 break;
         }
     }

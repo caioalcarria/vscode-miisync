@@ -1,5 +1,39 @@
 # Change Log
 
+## [0.14.2] - 2026-06-01
+
+### Added
+
+- **MCP Server** integrado com 62 ferramentas para agentes de IA (Claude Code, Gemini CLI, Copilot)
+  - Categorias: Config/Auth, Web Server, Catálogo, TQSQ, TRX (leitura/edição in-memory/persistência), SAP helpers
+  - Edição de TRX 100% in-memory — tools `trx_add_*`/`trx_set_*`/`trx_delete_*` retornam novo XML sem gravar
+  - Funções `addVariableToRawTrx`, `editVariableInRawTrx`, `deleteVariableInRawTrx` no parser TRX
+  - Tools de introspecção SQL: `tqsq_describe_table`, `tqsq_list_stored_procedures`, `tqsq_get_stored_procedure`
+  - `tqsq_run_adhoc` com SQL guard (SELECT livre; INSERT/UPDATE/DELETE e DDL gated por policy)
+- **Modelo de segurança não-burlável** no servidor MCP:
+  - `policy.mode`: `readonly` | `write` | `full`
+  - Classify dinâmico CREATE vs EDIT (validado por existência do arquivo)
+  - Confirm-token em 2 etapas para EDIT/DELETE (severity-gated)
+  - Backup automático no servidor antes de EDIT/DELETE
+  - `protectedPaths` (globs de negação incondicional)
+  - `severityBlock` / `severityRequireToken` configuráveis
+  - Auditoria em `.miisync/mcp-audit.log`
+  - Git commit após upload via `security/git.ts`
+- **Fallback enterprise** para Claude Code: detecta `~/.claude/remote-settings.json` com `allowedMcpServers` whitelist e registra automaticamente no `~/.claude.json` sob nome permitido (ex: `shell`)
+- **Seção 🤖 MCP / AI Tools** na aba de Configurações (webview): toggles de clientes e controles de policy (mode, allowDelete, allowSqlWrite, allowSqlDDL, allowTrxRun, protectedPaths, git)
+- Gera `.mcp.json` (Claude Code), `.gemini/settings.json` (Gemini CLI) e `.claude/settings.json` com `enableAllProjectMcpServers` ao salvar configuração com MCP ativo
+- **Cliente MII autônomo** (`mcp/miiClient.ts`) com Basic Auth para todos os endpoints (Catalog/Illuminator/Runner) — independente do VS Code
+- Registry de tools no servidor MCP com dispatch guardado (scope → protect → severity → token → backup → handler → audit)
+- Bloco `mcp` no `miisync.json` com `enabled`, `clients` e `policy`
+
+### Fixed
+
+- `skipLibCheck: true` no `tsconfig.json` para compatibilidade com `@modelcontextprotocol/sdk` (zod v4 interno incompatível com TS 4.9)
+- TypeScript atualizado para v5 (resolve `skipLibCheck` para arquivos `.d.cts`)
+- `loadTransaction` com fallback `Mode=Load` simples + extensão `.trx` (MII 15.0 SP3 não suporta `Class=Transaction`)
+- `loadQueryTemplate` idem com `.tqsq`
+- `saveTransaction` com fallback para `Mode=Save` simples
+
 ## [0.14.0] - 09/12/2024
 
 ### Added

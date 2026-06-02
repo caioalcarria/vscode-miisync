@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "miisync": {
+      "command": "node",
+      "args": ["c:\\PROJECTS\\SELF\\vscode-miisync\\out\\mcp\\server.js"]
+    }
+  }
+}

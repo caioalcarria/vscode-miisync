@@ -19,6 +19,50 @@ export interface SystemConfig extends MIIServer {
     password?: string,
 }
 
+export interface McpClients {
+    claudeCode?: boolean,
+    geminiCLI?: boolean,
+    copilotCLI?: boolean,
+    copilotVSCode?: boolean,
+}
+
+export type McpMode = 'readonly' | 'write' | 'full';
+export type McpGitMode = 'inherit' | 'always' | 'disabled';
+
+export interface McpPolicy {
+    /** Linha de base: readonly (só leitura) | write (cria/edita) | full (tudo conforme flags) */
+    mode?: McpMode,
+    /** Habilita a classe DELETE */
+    allowDelete?: boolean,
+    /** Permite INSERT/UPDATE/DELETE no tqsq_run_adhoc */
+    allowSqlWrite?: boolean,
+    /** Permite DROP/ALTER/TRUNCATE/CREATE no tqsq_run_adhoc */
+    allowSqlDDL?: boolean,
+    /** Permite executar transações (trx_run) */
+    allowTrxRun?: boolean,
+    /** Exige confirm-token (2 etapas) nas operações gated */
+    confirmToken?: boolean,
+    /** Globs de caminhos protegidos — escrita/delete negada incondicionalmente */
+    protectedPaths?: string[],
+    /** Bloqueia operações destrutivas a partir deste severity (inclusive) */
+    severityBlock?: Severity,
+    /** Exige token para EDIT/DELETE a partir deste severity (inclusive) */
+    severityRequireToken?: Severity,
+    /** Commit no git ao subir: inherit (usa gitCommitOnUpload) | always | disabled */
+    git?: McpGitMode,
+    /** Liga o log de auditoria em .miisync/mcp-audit.log */
+    audit?: boolean,
+}
+
+export interface McpConfig {
+    enabled?: boolean,
+    clients?: McpClients,
+    /** Nome a usar no fallback enterprise do Claude Code (deve estar na allowlist). Vazio = automático. */
+    claudeEnterpriseAlias?: string,
+    /** Política de segurança aplicada pelo MCP server */
+    policy?: McpPolicy,
+}
+
 export interface UserConfig {
     systems?: System[],
     removeFromLocalPath?: string[],
@@ -29,6 +73,7 @@ export interface UserConfig {
     include?: string[],
     useRootConfig?: boolean,
     rootConfig?: string,
+    mcp?: McpConfig,
 }
 
 

@@ -379,3 +379,140 @@ export function deleteSequenceFromRawTrx(xml: string, stepPath: number[]): strin
 
     return buildTrxXml(rawObj);
 }
+
+export function editLinksInRawTrx(
+    xml: string,
+    stepPath: number[],
+    actionName: string,
+    incoming: TrxLink[],
+    outgoing: TrxLink[]
+): string {
+    const rawObj = parseRawTrx(xml);
+    const step = navigateToStep(rawObj, stepPath);
+    if (!step) return xml;
+
+    const actions = asArray(step.Actions?.Action);
+    const actionRef = actions.find((a: any) => String(a.Name) === actionName);
+    if (!actionRef) return xml;
+
+    const toAssign = (links: TrxLink[]) =>
+        links.map(l => ({
+            '@_xsi:type': l.type || 'Assign',
+            Name: '',
+            Description: '',
+            To: l.to,
+            From: l.from,
+        }));
+
+    actionRef.IncomingLinks = incoming.length ? { Assign: toAssign(incoming) } : '';
+    actionRef.OutgoingLinks = outgoing.length ? { Assign: toAssign(outgoing) } : '';
+
+    return buildTrxXml(rawObj);
+}
+
+export function editActionPropsInRawTrx(
+    xml: string,
+    actionName: string,
+    props: Record<string, any>
+): string {
+    const rawObj = parseRawTrx(xml);
+    const items = asArray(rawObj?.Transaction?.Actions?.ContextItem);
+    const item = items.find((i: any) => String(i.Name) === actionName);
+    if (!item) return xml;
+
+    const existingType: string = (item.Value?.['@_xsi:type'] as string) || '';
+    item.Value = { '@_xsi:type': existingType, ...props };
+
+    return buildTrxXml(rawObj);
+}
+
+export function renameStepInRawTrx(
+    xml: string,
+    stepPath: number[],
+    newName: string
+): string {
+    const rawObj = parseRawTrx(xml);
+    const step = navigateToStep(rawObj, stepPath);
+    if (!step) return xml;
+
+    const oldName = String(step.Name ?? '');
+    step.Name = newName;
+
+    // Keep GUILayoutItem in sync
+    for (const item of asArray(rawObj?.Transaction?.Layout?.GUILayoutItem)) {
+        if (String((item as any).Name) === oldName) {
+            (item as any).Name = newName;
+            break;
+        }
+    }
+
+    return buildTrxXml(rawObj);
+}
+
+// ─── Variáveis (Context / Local) ──────────────────────────────────────────────
+
+function xsiType(type?: string): string {
+    const t = (type || 'string').trim();
+    return t.includes(':') ? t : `xsd:${t}`;
+}
+
+function scopeKey(scope: string): 'Context' | 'Local' {
+    return scope === 'local' ? 'Local' : 'Context';
+}
+
+function ensureContextItems(tx: any, key: 'Context' | 'Local'): any[] {
+    if (!tx[key] || typeof tx[key] !== 'object') tx[key] = {};
+    if (!tx[key].ContextItem) tx[key].ContextItem = [];
+    if (!Array.isArray(tx[key].ContextItem)) tx[key].ContextItem = [tx[key].ContextItem];
+    return tx[key].ContextItem;
+}
+
+export function addVariableToRawTrx(
+    xml: string, scope: 'context' | 'local', name: string, type?: string, description?: string, readOnly?: boolean
+): string {
+    const rawObj = parseRawTrx(xml);
+    const tx = rawObj?.Transaction;
+    if (!tx) return xml;
+    const items = ensureContextItems(tx, scopeKey(scope));
+    if (items.some((i: any) => String(i.Name) === name)) return xml; // já existe
+    items.push({
+        Name: name,
+        Description: description || '',
+        MinRange: '0',
+        MaxRange: '0',
+        Value: { '@_xsi:type': xsiType(type) },
+        ReadOnly: readOnly ? 'true' : 'false',
+    });
+    return buildTrxXml(rawObj);
+}
+
+export function editVariableInRawTrx(
+    xml: string, scope: 'context' | 'local', name: string,
+    changes: { newName?: string; type?: string; description?: string; readOnly?: boolean }
+): string {
+    const rawObj = parseRawTrx(xml);
+    const tx = rawObj?.Transaction;
+    if (!tx) return xml;
+    const items = asArray(tx[scopeKey(scope)]?.ContextItem);
+    const item = items.find((i: any) => String(i.Name) === name);
+    if (!item) return xml;
+    if (changes.newName !== undefined) (item as any).Name = changes.newName;
+    if (changes.description !== undefined) (item as any).Description = changes.description;
+    if (changes.readOnly !== undefined) (item as any).ReadOnly = changes.readOnly ? 'true' : 'false';
+    if (changes.type !== undefined) {
+        (item as any).Value = { '@_xsi:type': xsiType(changes.type) };
+    }
+    return buildTrxXml(rawObj);
+}
+
+export function deleteVariableInRawTrx(xml: string, scope: 'context' | 'local', name: string): string {
+    const rawObj = parseRawTrx(xml);
+    const tx = rawObj?.Transaction;
+    if (!tx) return xml;
+    const key = scopeKey(scope);
+    const items = asArray(tx[key]?.ContextItem);
+    const filtered = items.filter((i: any) => String(i.Name) !== name);
+    if (filtered.length === items.length) return xml;
+    tx[key] = filtered.length ? { ContextItem: filtered } : '';
+    return buildTrxXml(rawObj);
+}

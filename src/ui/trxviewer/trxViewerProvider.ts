@@ -4,7 +4,7 @@ import { actionCatalog } from '../../modules/actioncatalog';
 import { configManager } from '../../modules/config';
 import { illuminatorService } from '../../miiservice/illuminatorService';
 import { runnerService } from '../../miiservice/runnerService';
-import { parseTrx, TrxData, addSequenceToRawTrx, addActionToRawTrx, deleteActionFromRawTrx, deleteSequenceFromRawTrx } from './trxParser';
+import { parseTrx, TrxData, addSequenceToRawTrx, addActionToRawTrx, deleteActionFromRawTrx, deleteSequenceFromRawTrx, editLinksInRawTrx, editActionPropsInRawTrx, renameStepInRawTrx, TrxLink } from './trxParser';
 
 // Track active panels for catalog updates
 const activePanels = new Set<{ panel: vscode.WebviewPanel; uri: vscode.Uri }>();
@@ -97,6 +97,36 @@ export class TrxViewerProvider implements vscode.CustomReadonlyEditorProvider {
                             if (!system) { webviewPanel.webview.postMessage({ type: 'blsCredentials', credentials: [] }); break; }
                             const credentials = await illuminatorService.getBLSCredentials(system).catch(() => []);
                             webviewPanel.webview.postMessage({ type: 'blsCredentials', credentials });
+                            break;
+                        }
+                        case 'editLinks': {
+                            const bytes = await vscode.workspace.fs.readFile(document.uri);
+                            const xml = new TextDecoder('utf-8').decode(bytes);
+                            const newXml = editLinksInRawTrx(xml, msg.path, msg.actionName, msg.incoming as TrxLink[], msg.outgoing as TrxLink[]);
+                            if (newXml !== xml) {
+                                await vscode.workspace.fs.writeFile(document.uri, new TextEncoder().encode(newXml));
+                                webviewPanel.webview.postMessage({ type: 'refresh', data: parseTrx(newXml) });
+                            }
+                            break;
+                        }
+                        case 'editActionProps': {
+                            const bytes = await vscode.workspace.fs.readFile(document.uri);
+                            const xml = new TextDecoder('utf-8').decode(bytes);
+                            const newXml = editActionPropsInRawTrx(xml, msg.actionName, msg.props);
+                            if (newXml !== xml) {
+                                await vscode.workspace.fs.writeFile(document.uri, new TextEncoder().encode(newXml));
+                                webviewPanel.webview.postMessage({ type: 'refresh', data: parseTrx(newXml) });
+                            }
+                            break;
+                        }
+                        case 'renameStep': {
+                            const bytes = await vscode.workspace.fs.readFile(document.uri);
+                            const xml = new TextDecoder('utf-8').decode(bytes);
+                            const newXml = renameStepInRawTrx(xml, msg.path, msg.newName);
+                            if (newXml !== xml) {
+                                await vscode.workspace.fs.writeFile(document.uri, new TextEncoder().encode(newXml));
+                                webviewPanel.webview.postMessage({ type: 'refresh', data: parseTrx(newXml) });
+                            }
                             break;
                         }
                     }
@@ -547,8 +577,28 @@ tr:hover td { background: #2a2d2e; }
 .empty-msg { color: #666; font-style: italic; font-size: 12px; padding: 8px 0; }
 
 /* ── Properties sidebar ── */
+/* ── Action gear button ── */
+.action-gear-btn {
+  position: absolute; top: 2px; left: 2px;
+  font-size: 10px; color: transparent; cursor: pointer;
+  padding: 0 3px; border-radius: 2px; line-height: 14px;
+  transition: color 0.1s;
+}
+.action-card:hover .action-gear-btn { color: #888; }
+.action-gear-btn:hover { color: #fff !important; background: rgba(100,100,255,0.2); }
+
+/* ── Rename inline input ── */
+.rename-input {
+  background: var(--vscode-input-background,#3c3c3c);
+  color: var(--vscode-input-foreground,#ccc);
+  border: 1px solid var(--vscode-focusBorder,#007acc);
+  border-radius: 2px; padding: 0 4px; font-size: 11px;
+  font-weight: 600; outline: none; min-width: 60px; max-width: 120px;
+}
+
+/* ── Properties / Link-editor sidebar ── */
 .props-sidebar {
-  width: 280px; min-width: 280px;
+  width: 380px; min-width: 380px;
   background: var(--vscode-sideBar-background, #252526);
   border-left: 1px solid var(--vscode-panel-border, #444);
   display: flex; flex-direction: column; overflow: hidden;
@@ -556,35 +606,81 @@ tr:hover td { background: #2a2d2e; }
 }
 .props-sidebar.collapsed { width: 0; min-width: 0; border-left: none; }
 .props-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 10px; font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.5px; color: #888;
-  border-bottom: 1px solid var(--vscode-panel-border, #444); flex-shrink: 0;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 7px 10px; border-bottom: 1px solid var(--vscode-panel-border, #444); flex-shrink: 0;
 }
-.props-close { background: none; border: none; color: #888; cursor: pointer; font-size: 12px; padding: 2px 4px; }
+.props-action-name { font-size: 12px; font-weight: 700; color: #ccc; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.props-type-pill { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 3px; background: #1e3a4a; color: #5ab8e2; flex-shrink: 0; }
+.props-close { background: none; border: none; color: #888; cursor: pointer; font-size: 12px; padding: 2px 4px; margin-left: auto; flex-shrink: 0; }
 .props-close:hover { color: #ccc; }
-.props-body { flex: 1; overflow-y: auto; padding: 10px; }
-.props-title { font-size: 11px; font-weight: 700; color: #ccc; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #333; word-break: break-all; }
-.props-type-pill { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 3px; background: #1e3a4a; color: #5ab8e2; margin-bottom: 8px; }
-.prop-group { margin-bottom: 14px; }
-.prop-group-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin-bottom: 6px; }
-.prop-row { margin-bottom: 8px; }
-.prop-label { font-size: 10px; color: #888; margin-bottom: 2px; }
-.prop-value { font-size: 11px; color: #ccc; word-break: break-all; font-family: monospace; background: #1e1e28; padding: 3px 6px; border-radius: 2px; line-height: 1.4; }
-.prop-value.empty { color: #555; font-style: italic; font-family: inherit; }
-.prop-link { font-size: 10px; color: #4ec9b0; text-decoration: underline; cursor: pointer; background: none; border: none; padding: 0; }
-.links-edit-section { margin-top: 10px; }
-.links-edit-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin-bottom: 5px; }
-.link-edit-row { display: flex; flex-direction: column; gap: 2px; background: #1e1e28; border-radius: 3px; padding: 5px 7px; margin-bottom: 5px; font-size: 10px; }
-.link-edit-from { color: #9cdcfe; font-family: monospace; word-break: break-all; }
-.link-edit-arrow { color: #4ec9b0; font-size: 10px; }
-.link-edit-to { color: #4ec9b0; font-family: monospace; word-break: break-all; }
-.link-edit-type { font-size: 9px; color: #666; }
-.props-run-btn {
-  margin: 10px 10px 0; padding: 7px; background: #1a4a1a; color: #6dbf6d;
-  border: 1px solid #2d7a2d; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 600; width: calc(100% - 20px);
-}
-.props-run-btn:hover { background: #1e5c1e; }
+
+/* ── Props panel tabs ── */
+.props-tabs { display: flex; border-bottom: 1px solid #444; flex-shrink: 0; background: #1e1e2a; }
+.props-tab { padding: 6px 14px; font-size: 11px; font-weight: 600; color: #888; cursor: pointer; border-bottom: 2px solid transparent; user-select: none; }
+.props-tab:hover { color: #ccc; }
+.props-tab.active { color: #5ab8e2; border-bottom-color: #5ab8e2; }
+
+/* ── Link editor layout ── */
+.link-ed-wrap { display: flex; flex: 1; overflow: hidden; min-height: 0; flex-direction: column; }
+.link-dir-tabs { display: flex; gap: 0; padding: 6px 8px 0; flex-shrink: 0; }
+.link-dir-btn { padding: 4px 12px; font-size: 11px; border: 1px solid #444; background: none; color: #888; cursor: pointer; border-radius: 3px 3px 0 0; margin-right: 2px; }
+.link-dir-btn.active { background: #1e2a3a; color: #5ab8e2; border-color: #5ab8e2; border-bottom-color: #1e2a3a; }
+
+.link-split { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+
+/* Source tree (left) */
+.src-tree { width: 140px; min-width: 140px; border-right: 1px solid #333; overflow-y: auto; padding: 6px 0; flex-shrink: 0; background: #1a1a22; }
+.src-node { font-size: 10px; cursor: pointer; user-select: none; }
+.src-node-hdr { display: flex; align-items: center; gap: 3px; padding: 3px 8px; color: #888; }
+.src-node-hdr:hover { background: rgba(255,255,255,0.05); color: #ccc; }
+.src-node-hdr .chev { font-size: 8px; color: #555; width: 10px; flex-shrink: 0; }
+.src-node-hdr .src-lbl { color: #9cdcfe; font-weight: 600; }
+.src-node-children { padding-left: 12px; display: none; }
+.src-node-children.open { display: block; }
+.src-leaf { padding: 2px 8px 2px 16px; font-size: 10px; color: #aaa; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
+.src-leaf:hover { background: rgba(90,184,226,0.12); color: #5ab8e2; }
+
+/* Link list (right top) */
+.link-ed-right { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-width: 0; }
+.link-list { flex: 1; overflow-y: auto; min-height: 0; }
+.link-row-item { display: flex; flex-direction: column; padding: 5px 8px; border-bottom: 1px solid #2a2a2a; cursor: pointer; font-size: 10px; }
+.link-row-item:hover { background: rgba(255,255,255,0.04); }
+.link-row-item.selected { background: rgba(90,184,226,0.12); }
+.lri-from { color: #9cdcfe; font-family: monospace; word-break: break-all; }
+.lri-arrow { color: #555; font-size: 9px; margin: 1px 0; }
+.lri-to { color: #4ec9b0; font-family: monospace; word-break: break-all; }
+.link-empty { padding: 12px 8px; color: #555; font-size: 11px; font-style: italic; }
+
+/* Link form (bottom) */
+.link-form { border-top: 1px solid #333; padding: 8px; flex-shrink: 0; background: #1a1a2a; }
+.lf-row { margin-bottom: 6px; }
+.lf-label { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+.lf-input { width: 100%; background: #1e1e2e; color: #ccc; border: 1px solid #444; border-radius: 2px; padding: 4px 6px; font-size: 11px; font-family: monospace; outline: none; resize: vertical; min-height: 36px; }
+.lf-input:focus { border-color: var(--vscode-focusBorder,#007acc); }
+.lf-select { width: 100%; background: #1e1e2e; color: #ccc; border: 1px solid #444; border-radius: 2px; padding: 4px 6px; font-size: 11px; outline: none; }
+.lf-select:focus { border-color: var(--vscode-focusBorder,#007acc); }
+.lf-radios { display: flex; gap: 12px; }
+.lf-radio { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #aaa; cursor: pointer; }
+.lf-radio input { cursor: pointer; accent-color: #5ab8e2; }
+.link-form-btns { display: flex; gap: 6px; margin-top: 6px; }
+.lf-btn { padding: 4px 10px; font-size: 11px; border-radius: 3px; cursor: pointer; border: 1px solid #555; }
+.lf-btn-save { background: #1a3a5a; color: #5ab8e2; border-color: #2a5a80; }
+.lf-btn-save:hover { background: #1e4a6a; }
+.lf-btn-del { background: #3a1a1a; color: #cc5555; border-color: #552222; }
+.lf-btn-del:hover { background: #4a1a1a; }
+.lf-btn-new { background: #1a3a1a; color: #5ab85a; border-color: #2a5a2a; }
+.lf-btn-new:hover { background: #1e4a1e; }
+
+/* ── Objeto (object props) tab ── */
+.obj-props-wrap { flex: 1; overflow-y: auto; padding: 10px; }
+.obj-prop-row { margin-bottom: 10px; }
+.obj-prop-label { font-size: 10px; color: #888; margin-bottom: 3px; }
+.obj-prop-input { width: 100%; background: #1e1e2e; color: #ccc; border: 1px solid #444; border-radius: 2px; padding: 5px 7px; font-size: 11px; font-family: monospace; outline: none; }
+.obj-prop-input:focus { border-color: var(--vscode-focusBorder,#007acc); }
+.obj-prop-select { width: 100%; background: #1e1e2e; color: #ccc; border: 1px solid #444; border-radius: 2px; padding: 5px 7px; font-size: 11px; outline: none; }
+.obj-save-btn { width: 100%; padding: 7px; background: #1a3a5a; color: #5ab8e2; border: 1px solid #2a5a80; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 600; margin-top: 4px; }
+.obj-save-btn:hover { background: #1e4a6a; }
+.obj-note { color: #666; font-size: 11px; font-style: italic; padding: 8px 0; }
 
 /* ── Run modal ── */
 .run-modal-overlay {
@@ -783,6 +879,9 @@ let selectedPath = null;  // Array of indices, e.g. [0, 2, 1]
 let stepIdCounter = 0;
 const idToPath = {};  // elementId → path array
 const pathToId = {};  // 'path string' → elementId
+let collapsedPaths = new Set(); // paths collapsed by user — persists across refreshes
+// Link editor state
+let linkEdState = { action: null, stepPath: null, tab: 'links', dir: 'incoming', selIdx: -1, from: '', to: '', type: 'Assign' };
 
 // ─── Utilities ─────────────────────────────────────────────────────────────
 
@@ -874,6 +973,17 @@ function createActionCard(actionRef, actionDefs, stepPath) {
     });
   });
 
+  // Gear button — opens link editor focused on Objeto tab
+  const gearBtn = document.createElement('div');
+  gearBtn.className = 'action-gear-btn';
+  gearBtn.textContent = '⚙';
+  gearBtn.title = 'Configurar objeto: ' + actionRef.name;
+  gearBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openLinkEditor(actionRef, stepPath, 'objeto');
+  });
+
+  card.appendChild(gearBtn);
   card.appendChild(arrows);
   card.appendChild(iconWrap);
   card.appendChild(name);
@@ -881,12 +991,7 @@ function createActionCard(actionRef, actionDefs, stepPath) {
 
   card.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (actionRef.incoming.length > 0 || actionRef.outgoing.length > 0) {
-      showLinks(actionRef, type, card);
-    }
-    // Show full properties in sidebar
-    const props = DATA && DATA.actionProps ? (DATA.actionProps[actionRef.name] || {}) : {};
-    showActionProps(actionRef.name, type, props, actionRef.incoming, actionRef.outgoing);
+    openLinkEditor(actionRef, stepPath, 'links');
   });
   return card;
 }
@@ -926,20 +1031,39 @@ function createStepElement(step, actionDefs, path, branchType) {
 
   // Collapse toggle if has children
   if (step.steps.length > 0) {
+    const isCollapsed = collapsedPaths.has(ps);
     const collapseBtn = document.createElement('span');
     collapseBtn.className = 'step-collapse';
-    collapseBtn.textContent = '▼';
+    collapseBtn.textContent = isCollapsed ? '▶' : '▼';
     collapseBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const childContainer = wrapper.querySelector('.step-children-h');
       if (childContainer) {
         const hidden = childContainer.classList.toggle('hidden');
         collapseBtn.textContent = hidden ? '▶' : '▼';
-        requestAnimationFrame(drawConnections);
+        if (hidden) collapsedPaths.add(ps); else collapsedPaths.delete(ps);
+        scheduleDrawConnections();
       }
     });
     header.appendChild(collapseBtn);
   }
+
+  // Double-click on name to rename
+  nameEl.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    const inp = document.createElement('input');
+    inp.className = 'rename-input';
+    inp.value = step.name;
+    nameEl.replaceWith(inp);
+    inp.focus(); inp.select();
+    const commit = () => {
+      const v = inp.value.trim();
+      if (v && v !== step.name) vscode.postMessage({ type: 'renameStep', path, newName: v });
+      inp.replaceWith(nameEl);
+    };
+    inp.addEventListener('blur', commit);
+    inp.addEventListener('keydown', e2 => { if (e2.key === 'Enter') inp.blur(); if (e2.key === 'Escape') { inp.value = step.name; inp.blur(); } });
+  });
 
   // Delete sequence button
   const delSeqBtn = document.createElement('span');
@@ -977,8 +1101,7 @@ function createStepElement(step, actionDefs, path, branchType) {
   if (step.steps.length > 0) {
     const isConditional = step.type === 'Conditional';
     const childContainer = document.createElement('div');
-    // MII layout: children are always horizontal (side by side)
-    childContainer.className = 'step-children-h';
+    childContainer.className = 'step-children-h' + (collapsedPaths.has(ps) ? ' hidden' : '');
     step.steps.forEach((child, i) => {
       const bt = isConditional ? (i === 0 ? 'true' : 'false') : 'sequential';
       const childPath = [...path, i];
@@ -1038,6 +1161,15 @@ function updateToolbar() {
 }
 
 // ─── SVG Connections ───────────────────────────────────────────────────────
+
+let _drawRafId = null;
+function scheduleDrawConnections() {
+  if (_drawRafId) cancelAnimationFrame(_drawRafId);
+  _drawRafId = requestAnimationFrame(() => {
+    _drawRafId = null;
+    drawConnections();
+  });
+}
 
 function drawConnections() {
   const svg = document.getElementById('conn-svg');
@@ -1283,19 +1415,7 @@ window.addEventListener('message', (event) => {
   const msg = event.data;
   switch (msg.type) {
     case 'refresh':
-      // Deep-replace DATA properties with new data
-      if (msg.data) {
-        DATA.name = msg.data.name;
-        DATA.version = msg.data.version;
-        DATA.attributes = msg.data.attributes;
-        DATA.context = msg.data.context;
-        DATA.local = msg.data.local;
-        DATA.steps = msg.data.steps;
-        DATA.actionDefs = msg.data.actionDefs;
-        DATA.actionProps = msg.data.actionProps || {};
-      }
-      selectedPath = null;
-      renderDiagram();
+      if (msg.data) applyRefresh(msg.data);
       break;
     case 'catalogUpdate':
       CATALOG = msg.categories;
@@ -1303,6 +1423,47 @@ window.addEventListener('message', (event) => {
       break;
   }
 });
+
+// ─── applyRefresh — update data without full re-render ────────────────────
+
+function applyRefresh(newData) {
+  Object.assign(DATA, newData);
+
+  // Update vars and info tabs in place
+  const vp = document.getElementById('panel-vars');
+  if (vp) vp.innerHTML = '<div class="vars-scroll">' + buildVarsHtml() + '</div>';
+  const ip = document.getElementById('panel-info');
+  if (ip) ip.innerHTML = '<div class="info-scroll">' + buildInfoHtml() + '</div>';
+
+  // Preserve scroll
+  const scrollEl = document.getElementById('diagram-scroll');
+  const sx = scrollEl ? scrollEl.scrollLeft : 0;
+  const sy = scrollEl ? scrollEl.scrollTop : 0;
+
+  renderDiagram();
+
+  if (scrollEl) { requestAnimationFrame(() => { scrollEl.scrollLeft = sx; scrollEl.scrollTop = sy; }); }
+
+  // Update link editor if a specific action is open
+  if (linkEdState.action) {
+    const updName = linkEdState.action.name;
+    // Find the updated actionRef in the new steps
+    function findRef(steps) {
+      for (const s of steps) {
+        const a = (s.actions||[]).find(r => r.name === updName);
+        if (a) return a;
+        const found = findRef(s.steps||[]);
+        if (found) return found;
+      }
+      return null;
+    }
+    const updated = findRef(DATA.steps || []);
+    if (updated) {
+      linkEdState.action = updated;
+      renderPropsPanel();
+    }
+  }
+}
 
 // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -1353,17 +1514,7 @@ function renderDiagram() {
 
   updateToolbar();
 
-  // Draw connections after layout settles — use multiple RAF passes to ensure
-  // the browser has finished flex layout before measuring positions.
-  // Also force a reflow by reading a layout property first.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      void canvas.offsetWidth; // force reflow
-      drawConnections();
-      // One more pass for large trees that need extra layout time
-      setTimeout(drawConnections, 100);
-    });
-  });
+  scheduleDrawConnections();
 }
 
 function render() {
@@ -1379,13 +1530,7 @@ function render() {
   const shortName = txName.split('/').pop() || txName;
 
   app.innerHTML =
-    '<div id="props-sidebar" class="props-sidebar collapsed">' +
-      '<div class="props-header">' +
-        '<span>Propriedades</span>' +
-        '<button class="props-close" id="btn-props-close">✕</button>' +
-      '</div>' +
-      '<div class="props-body" id="props-body"></div>' +
-    '</div>' +
+    '<div id="props-sidebar" class="props-sidebar collapsed"></div>' +
     '<div class="sidebar" id="sidebar">' +
       '<div class="sidebar-header">' +
         '<span>Actions</span>' +
@@ -1444,10 +1589,10 @@ function render() {
   renderDiagram();
   renderSidebar();
 
-  // ResizeObserver for connection redraw
+  // ResizeObserver + scroll listener for connection redraw
   const canvas = document.getElementById('diagram-canvas');
   if (canvas) {
-    new ResizeObserver(() => drawConnections()).observe(canvas);
+    new ResizeObserver(scheduleDrawConnections).observe(canvas);
   }
 
   // Deselect on canvas click
@@ -1458,6 +1603,7 @@ function render() {
         selectStep(selectedPath); // toggle off
       }
     });
+    scrollEl.addEventListener('scroll', scheduleDrawConnections, { passive: true });
   }
 
   // Bind event listeners (avoid inline onclick in template literals)
@@ -1476,132 +1622,346 @@ function render() {
   if (searchInput) searchInput.addEventListener('input', function() { filterActions(this.value); });
   var btnRunTrx = document.getElementById('btn-run-trx');
   if (btnRunTrx) btnRunTrx.addEventListener('click', openRunModal);
-  var btnPropsClose = document.getElementById('btn-props-close');
-  if (btnPropsClose) btnPropsClose.addEventListener('click', closePropsPanel);
 }
 
-// ─── Properties sidebar ────────────────────────────────────────────────────
+// ─── Link Editor Panel ─────────────────────────────────────────────────────
 
-let selectedAction = null; // {name, type, props, incoming, outgoing}
-
-function showActionProps(name, type, props, incoming, outgoing) {
-  selectedAction = {name, type, props: props||{}, incoming: incoming||[], outgoing: outgoing||[]};
+function openLinkEditor(actionRef, stepPath, tab) {
+  linkEdState.action = actionRef;
+  linkEdState.stepPath = stepPath;
+  linkEdState.tab = tab || 'links';
+  linkEdState.dir = 'incoming';
+  linkEdState.selIdx = -1;
+  linkEdState.from = ''; linkEdState.to = ''; linkEdState.type = 'Assign';
   const sidebar = document.getElementById('props-sidebar');
-  if (sidebar) {
-    sidebar.classList.remove('collapsed');
-    renderPropsPanel();
-  }
-}
-
-function renderPropsPanel() {
-  const body = document.getElementById('props-body');
-  if (!body || !selectedAction) return;
-
-  const {name, type, props, incoming, outgoing} = selectedAction;
-  let html = \`<div class="props-title" title="\${esc(name)}">\${esc(name)}</div>
-<div class="props-type-pill">\${esc(type)}</div>\`;
-
-  // Type-specific properties
-  if (type === 'IlluminatorSQLQueryObject') {
-    html += \`<div class="prop-group">
-      <div class="prop-group-title">Configuração SQL</div>
-      <div class="prop-row"><div class="prop-label">QueryTemplate</div>
-        <div class="prop-value \${props.QueryTemplate?'':'empty'}">\${esc(props.QueryTemplate||'(não definido)')}</div></div>
-      <div class="prop-row"><div class="prop-label">Timeout</div>
-        <div class="prop-value">\${esc(props.Timeout||'0')}</div></div>
-    </div>\`;
-    if (props.QueryParameters) {
-      const items = props.QueryParameters?.ContextItem;
-      const arr = Array.isArray(items) ? items : (items ? [items] : []);
-      if (arr.length) {
-        html += \`<div class="prop-group"><div class="prop-group-title">Parâmetros (\${arr.length})</div>\`;
-        html += arr.map(p => \`<div class="prop-row">
-          <div class="prop-label">\${esc(p.Name||'')}</div>
-          <div class="prop-value">\${esc(String(p.Value?.['#text']||p.Value||''))}</div>
-        </div>\`).join('');
-        html += '</div>';
-      }
-    }
-  } else if (type === 'SAPJCOInterface') {
-    html += \`<div class="prop-group">
-      <div class="prop-group-title">Conexão JCO</div>
-      \${['ConnPropAlias','CredentialAlias','SAPRFC','SAPServerName','SAPClient','SAPSystemNumber','Language'].map(k =>
-        \`<div class="prop-row"><div class="prop-label">\${k}</div>
-         <div class="prop-value \${props[k]?'':'empty'}">\${esc(props[k]||'(não definido)')}</div></div>\`
-      ).join('')}
-      \${['ExecuteFunction','AutoCommit','AllowMultipleRows'].map(k =>
-        \`<div class="prop-row"><div class="prop-label">\${k}</div>
-         <div class="prop-value">\${esc(props[k]||'false')}</div></div>\`
-      ).join('')}
-    </div>\`;
-  } else if (type === 'Tracer' || type === 'XmlTracer' || type === 'EventLogger') {
-    html += \`<div class="prop-group">
-      <div class="prop-group-title">Tracer</div>
-      <div class="prop-row"><div class="prop-label">Message</div>
-        <div class="prop-value \${props.Message?'':'empty'}">\${esc(props.Message||'(vazio)')}</div></div>
-      <div class="prop-row"><div class="prop-label">Level</div>
-        <div class="prop-value">\${esc(props.Level||'INFO')}</div></div>
-    </div>\`;
-  } else if (type === 'TransactionCall') {
-    html += \`<div class="prop-group">
-      <div class="prop-group-title">Chamada de Transaction</div>
-      <div class="prop-row"><div class="prop-label">TransactionPath</div>
-        <div class="prop-value \${props.TransactionPath?'':'empty'}">\${esc(props.TransactionPath||'(não definido)')}</div></div>
-    </div>\`;
-  } else if (type === 'Assignment') {
-    html += \`<div class="prop-group"><div style="color:#666;font-size:11px;font-style:italic">Assignment não tem propriedades próprias — use os links para definir atribuições.</div></div>\`;
-  } else if (type === 'ConditionalAction') {
-    html += \`<div class="prop-group">
-      <div class="prop-group-title">Condição</div>
-      \${['Input1','Input2','Input3','Output','LogicalAnd','InputCount'].filter(k=>props[k]!=null).map(k =>
-        \`<div class="prop-row"><div class="prop-label">\${k}</div>
-         <div class="prop-value">\${esc(String(props[k]||''))}</div></div>\`
-      ).join('')}
-    </div>\`;
-  } else {
-    // Generic: show all props
-    const keys = Object.keys(props).filter(k => !k.startsWith('@'));
-    if (keys.length) {
-      html += \`<div class="prop-group"><div class="prop-group-title">Propriedades</div>\`;
-      html += keys.map(k => \`<div class="prop-row">
-        <div class="prop-label">\${esc(k)}</div>
-        <div class="prop-value">\${esc(String(props[k]||''))}</div>
-      </div>\`).join('');
-      html += '</div>';
-    }
-  }
-
-  // Links section
-  if (incoming.length || outgoing.length) {
-    html += \`<div class="links-edit-section">\`;
-    if (incoming.length) {
-      html += \`<div class="links-edit-title">Incoming Links (\${incoming.length})</div>\`;
-      html += incoming.map(l => \`<div class="link-edit-row">
-        <div class="link-edit-from">\${esc(l.from)}</div>
-        <div class="link-edit-arrow">→</div>
-        <div class="link-edit-to">\${esc(l.to)}</div>
-        <div class="link-edit-type">\${esc(l.type||'Assign')}</div>
-      </div>\`).join('');
-    }
-    if (outgoing.length) {
-      html += \`<div class="links-edit-title" style="margin-top:8px">Outgoing Links (\${outgoing.length})</div>\`;
-      html += outgoing.map(l => \`<div class="link-edit-row">
-        <div class="link-edit-from">\${esc(l.from)}</div>
-        <div class="link-edit-arrow">→</div>
-        <div class="link-edit-to">\${esc(l.to)}</div>
-        <div class="link-edit-type">\${esc(l.type||'Assign')}</div>
-      </div>\`).join('');
-    }
-    html += '</div>';
-  }
-
-  body.innerHTML = html;
+  if (sidebar) { sidebar.classList.remove('collapsed'); renderPropsPanel(); }
 }
 
 function closePropsPanel() {
-  selectedAction = null;
+  linkEdState.action = null;
   const sidebar = document.getElementById('props-sidebar');
   if (sidebar) sidebar.classList.add('collapsed');
+}
+
+function renderPropsPanel() {
+  const sidebar = document.getElementById('props-sidebar');
+  if (!sidebar || !linkEdState.action) return;
+  const { action, tab } = linkEdState;
+  const type = (DATA && DATA.actionDefs) ? (DATA.actionDefs[action.name] || 'Unknown') : 'Unknown';
+  const props = (DATA && DATA.actionProps) ? (DATA.actionProps[action.name] || {}) : {};
+
+  sidebar.innerHTML =
+    \`<div class="props-header">
+       <span class="props-action-name" title="\${esc(action.name)}">\${esc(action.name)}</span>
+       <span class="props-type-pill">\${esc(type)}</span>
+       <button class="props-close" id="btn-props-close">✕</button>
+     </div>
+     <div class="props-tabs">
+       <div class="props-tab\${tab==='links'?' active':''}" data-ptab="links">Links</div>
+       <div class="props-tab\${tab==='objeto'?' active':''}" data-ptab="objeto">Objeto</div>
+     </div>
+     <div id="props-tab-content" style="display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0"></div>\`;
+
+  sidebar.querySelectorAll('.props-tab').forEach(t => {
+    t.addEventListener('click', () => { linkEdState.tab = t.dataset.ptab; renderPropsTabContent(); });
+  });
+  document.getElementById('btn-props-close')?.addEventListener('click', closePropsPanel);
+  renderPropsTabContent();
+}
+
+function renderPropsTabContent() {
+  const cont = document.getElementById('props-tab-content');
+  if (!cont || !linkEdState.action) return;
+  const { action, tab } = linkEdState;
+  const type = (DATA && DATA.actionDefs) ? (DATA.actionDefs[action.name] || 'Unknown') : 'Unknown';
+  const props = (DATA && DATA.actionProps) ? (DATA.actionProps[action.name] || {}) : {};
+
+  // Update tab active class
+  document.querySelectorAll('.props-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.ptab === tab);
+  });
+
+  if (tab === 'links') renderLinkEditorContent(cont, action);
+  else renderObjPropsContent(cont, action.name, type, props);
+}
+
+// ─── Link Editor — Links tab ──────────────────────────────────────────────
+
+function renderLinkEditorContent(cont, action) {
+  const dir = linkEdState.dir;
+  const links = dir === 'incoming' ? action.incoming : action.outgoing;
+
+  cont.innerHTML =
+    \`<div class="link-ed-wrap">
+       <div class="link-dir-tabs">
+         <button class="link-dir-btn\${dir==='incoming'?' active':''}" data-dir="incoming">
+           ↓ Incoming (\${action.incoming.length})
+         </button>
+         <button class="link-dir-btn\${dir==='outgoing'?' active':''}" data-dir="outgoing">
+           ↑ Outgoing (\${action.outgoing.length})
+         </button>
+       </div>
+       <div class="link-split">
+         <div class="src-tree" id="src-tree"></div>
+         <div class="link-ed-right">
+           <div class="link-list" id="link-list">
+             \${links.length === 0 ? '<div class="link-empty">Nenhum link ' + (dir==='incoming'?'incoming':'outgoing') + '.</div>' :
+               links.map((l,i) => \`<div class="link-row-item\${i===linkEdState.selIdx?' selected':''}" data-li="\${i}">
+                 <span class="lri-from">\${esc(l.from)}</span>
+                 <span class="lri-arrow">→</span>
+                 <span class="lri-to">\${esc(l.to)}</span>
+               </div>\`).join('')}
+           </div>
+           <div class="link-form" id="link-form">
+             <div class="lf-row">
+               <div class="lf-label">De (From)</div>
+               <textarea class="lf-input" id="lf-from" rows="2" placeholder="Transaction.campo, Local.var, ActionName.Results{xpath}, expressão...">\${esc(linkEdState.from)}</textarea>
+             </div>
+             <div class="lf-row">
+               <div class="lf-label">Para (To)</div>
+               <select class="lf-select" id="lf-to">
+                 <option value="">-- selecione --</option>
+                 \${getTargetsForAction(action.name, dir).map(t =>
+                   \`<option value="\${esc(t)}" \${t===linkEdState.to?'selected':''}>\${esc(t)}</option>\`
+                 ).join('')}
+               </select>
+             </div>
+             <div class="lf-row">
+               <div class="lf-label">Tipo</div>
+               <div class="lf-radios">
+                 <label class="lf-radio"><input type="radio" name="lftype" value="Assign" \${linkEdState.type!=='AssignXml'?'checked':''}>Assign Value</label>
+                 <label class="lf-radio"><input type="radio" name="lftype" value="AssignXml" \${linkEdState.type==='AssignXml'?'checked':''}>Assign XML</label>
+               </div>
+             </div>
+             <div class="link-form-btns">
+               <button class="lf-btn lf-btn-new" id="lf-btn-new">+ Novo</button>
+               <button class="lf-btn lf-btn-save" id="lf-btn-save">💾 Salvar</button>
+               <button class="lf-btn lf-btn-del" id="lf-btn-del" \${linkEdState.selIdx<0?'disabled':''}>✕ Remover</button>
+             </div>
+           </div>
+         </div>
+       </div>
+     </div>\`;
+
+  // Build source tree
+  buildSourceTree(document.getElementById('src-tree'));
+
+  // Link list click — select & load into form
+  cont.querySelectorAll('.link-row-item').forEach(row => {
+    row.addEventListener('click', () => {
+      const i = parseInt(row.dataset.li);
+      linkEdState.selIdx = i;
+      const l = links[i];
+      linkEdState.from = l.from; linkEdState.to = l.to; linkEdState.type = l.type || 'Assign';
+      renderPropsTabContent();
+    });
+  });
+
+  // Dir tab buttons
+  cont.querySelectorAll('.link-dir-btn').forEach(b => {
+    b.addEventListener('click', () => { linkEdState.dir = b.dataset.dir; linkEdState.selIdx = -1; linkEdState.from=''; linkEdState.to=''; renderPropsTabContent(); });
+  });
+
+  // Form inputs live-update state
+  document.getElementById('lf-from')?.addEventListener('input', function() { linkEdState.from = this.value; });
+  document.getElementById('lf-to')?.addEventListener('change', function() { linkEdState.to = this.value; });
+  cont.querySelectorAll('input[name="lftype"]').forEach(r => r.addEventListener('change', function() { if(this.checked) linkEdState.type = this.value; }));
+
+  // New link
+  document.getElementById('lf-btn-new')?.addEventListener('click', () => {
+    linkEdState.selIdx = -1; linkEdState.from=''; linkEdState.to=''; linkEdState.type='Assign';
+    renderPropsTabContent();
+  });
+
+  // Save link
+  document.getElementById('lf-btn-save')?.addEventListener('click', () => {
+    const action = linkEdState.action;
+    const inLinks = [...action.incoming]; const outLinks = [...action.outgoing];
+    const targetList = dir === 'incoming' ? inLinks : outLinks;
+    const newLink = { from: linkEdState.from.trim(), to: linkEdState.to.trim(), type: linkEdState.type };
+    if (!newLink.from || !newLink.to) { alert('Preencha De e Para.'); return; }
+    if (linkEdState.selIdx >= 0 && linkEdState.selIdx < targetList.length) {
+      targetList[linkEdState.selIdx] = newLink;
+    } else {
+      targetList.push(newLink);
+      linkEdState.selIdx = targetList.length - 1;
+    }
+    vscode.postMessage({ type: 'editLinks', path: linkEdState.stepPath, actionName: action.name,
+      incoming: dir==='incoming'?inLinks:action.incoming,
+      outgoing: dir==='outgoing'?outLinks:action.outgoing });
+  });
+
+  // Delete link
+  document.getElementById('lf-btn-del')?.addEventListener('click', () => {
+    const action = linkEdState.action;
+    const inLinks = [...action.incoming]; const outLinks = [...action.outgoing];
+    const targetList = dir === 'incoming' ? inLinks : outLinks;
+    if (linkEdState.selIdx < 0 || linkEdState.selIdx >= targetList.length) return;
+    targetList.splice(linkEdState.selIdx, 1);
+    linkEdState.selIdx = -1; linkEdState.from=''; linkEdState.to='';
+    vscode.postMessage({ type: 'editLinks', path: linkEdState.stepPath, actionName: action.name,
+      incoming: dir==='incoming'?inLinks:action.incoming,
+      outgoing: dir==='outgoing'?outLinks:action.outgoing });
+  });
+}
+
+// ─── Source tree ──────────────────────────────────────────────────────────
+
+function buildSourceTree(el) {
+  if (!el || !DATA) return;
+  const insertFrom = (val) => {
+    const inp = document.getElementById('lf-from');
+    if (inp) { inp.value = val; linkEdState.from = val; }
+  };
+  const mkLeaf = (val) => {
+    const d = document.createElement('div');
+    d.className = 'src-leaf'; d.textContent = val; d.title = 'Inserir: ' + val;
+    d.addEventListener('click', () => insertFrom(val));
+    return d;
+  };
+  const mkGroup = (label, children) => {
+    const node = document.createElement('div'); node.className = 'src-node';
+    const hdr = document.createElement('div'); hdr.className = 'src-node-hdr';
+    const chev = document.createElement('span'); chev.className = 'chev'; chev.textContent = '▶';
+    const lbl = document.createElement('span'); lbl.className = 'src-lbl'; lbl.textContent = label;
+    hdr.appendChild(chev); hdr.appendChild(lbl); node.appendChild(hdr);
+    const ch = document.createElement('div'); ch.className = 'src-node-children';
+    children.forEach(c => ch.appendChild(c)); node.appendChild(ch);
+    hdr.addEventListener('click', () => { const o = ch.classList.toggle('open'); chev.textContent = o ? '▼' : '▶'; });
+    return node;
+  };
+
+  el.innerHTML = '';
+
+  // Transaction vars
+  if (DATA.context.length) {
+    el.appendChild(mkGroup('Transaction', DATA.context.map(v => mkLeaf('Transaction.' + v.name))));
+  }
+  // Local vars
+  if (DATA.local.length) {
+    el.appendChild(mkGroup('Local', DATA.local.map(v => mkLeaf('Local.' + v.name))));
+  }
+  // Actions
+  for (const [name, type] of Object.entries(DATA.actionDefs || {})) {
+    const children = [];
+    if (type === 'IlluminatorSQLQueryObject' || type.startsWith('Illuminator')) {
+      children.push(mkLeaf(name + '.Results'));
+      // Common columns from Results
+      ['Results{/Rowsets/Rowset/Row/col1}'].forEach(v => children.push(mkLeaf(name + '.' + v)));
+    }
+    children.push(mkLeaf(name + '.Output'));
+    el.appendChild(mkGroup(name + ' (' + (ACTION_INFO[type]?.label || type) + ')', children));
+  }
+}
+
+// ─── Get targets for action type ──────────────────────────────────────────
+
+function getTargetsForAction(actionName, dir) {
+  if (!DATA) return [];
+  const type = DATA.actionDefs?.[actionName] || 'Unknown';
+  const targets = [];
+
+  if (dir === 'incoming') {
+    if (type === 'IlluminatorSQLQueryObject') {
+      for (let i=1;i<=32;i++) targets.push(actionName + '.Param.' + i);
+      targets.push(actionName + '.QueryTemplate', actionName + '.Server', actionName + '.Mode', actionName + '.RowCount');
+    } else if (type === 'SAPJCOInterface') {
+      targets.push(actionName + '.ConnPropAlias', actionName + '.CredentialAlias', actionName + '.FunctionName', actionName + '.AutoCommit');
+    } else if (type === 'TransactionCall') {
+      targets.push(actionName + '.TransactionPath');
+      (DATA.context||[]).forEach(v => targets.push(actionName + '.' + v.name));
+    } else if (type === 'ConditionalAction') {
+      targets.push(actionName + '.Input1', actionName + '.Input2', actionName + '.Input3');
+    } else if (type === 'Assignment') {
+      (DATA.local||[]).forEach(v => targets.push('Local.' + v.name));
+      (DATA.context||[]).forEach(v => targets.push('Transaction.' + v.name));
+    } else if (type === 'Tracer' || type === 'XmlTracer' || type === 'EventLogger') {
+      targets.push(actionName + '.Message', actionName + '.Level');
+    } else {
+      targets.push(actionName + '.Input', actionName + '.Input1', actionName + '.Input2');
+    }
+  } else {
+    // outgoing — destination is usually Local or Transaction vars
+    (DATA.local||[]).forEach(v => targets.push('Local.' + v.name));
+    (DATA.context||[]).forEach(v => targets.push('Transaction.' + v.name));
+    targets.push(actionName + '.Output');
+  }
+  return targets;
+}
+
+// ─── Objeto tab — action props editor ────────────────────────────────────
+
+function renderObjPropsContent(cont, actionName, type, props) {
+  let rows = '';
+  const field = (label, id, val, multiline) =>
+    \`<div class="obj-prop-row">
+       <div class="obj-prop-label">\${esc(label)}</div>
+       \${multiline
+         ? \`<textarea class="obj-prop-input" id="\${id}" rows="2">\${esc(val||'')}</textarea>\`
+         : \`<input class="obj-prop-input" id="\${id}" value="\${esc(val||'')}"/>\`}
+     </div>\`;
+  const sel = (label, id, val, opts) =>
+    \`<div class="obj-prop-row">
+       <div class="obj-prop-label">\${esc(label)}</div>
+       <select class="obj-prop-select" id="\${id}">\${opts.map(o=>\`<option value="\${esc(o)}" \${o===val?'selected':''}>\${esc(o)}</option>\`).join('')}</select>
+     </div>\`;
+
+  const SERVERS = (window._sqlServers || []);
+  const MODES = ['FixedQuery','FixedQueryWithOutput','Query','Command'];
+
+  if (type === 'IlluminatorSQLQueryObject') {
+    rows += field('QueryTemplate (caminho catálogo)', 'op-qt', props.QueryTemplate, false);
+    rows += sel('Server', 'op-srv', props.Server||'', SERVERS.length ? SERVERS : [props.Server||'']);
+    rows += sel('Mode', 'op-mode', props.Mode||props['@_Mode']||'FixedQuery', MODES);
+    rows += field('RowCount', 'op-rc', props.RowCount||'500', false);
+    rows += field('Timeout (s)', 'op-to', props.Timeout||'60', false);
+  } else if (type === 'SAPJCOInterface') {
+    rows += field('ConnPropAlias', 'op-cpa', props.ConnPropAlias, false);
+    rows += field('CredentialAlias', 'op-cra', props.CredentialAlias, false);
+    rows += field('FunctionName', 'op-fn', props.FunctionName, false);
+    rows += \`<div class="obj-prop-row"><div class="obj-prop-label">AutoCommit</div>
+      <select class="obj-prop-select" id="op-ac"><option value="true" \${props.AutoCommit==='true'?'selected':''}>true</option><option value="false" \${props.AutoCommit!=='true'?'selected':''}>false</option></select></div>\`;
+  } else if (type === 'TransactionCall' || type === 'DynamicTransactionCall') {
+    rows += field('TransactionPath', 'op-tp', props.TransactionPath, false);
+  } else if (type === 'ConditionalAction') {
+    rows += field('Input1 (expressão)', 'op-i1', props.Input1, true);
+    rows += field('Input2', 'op-i2', props.Input2, true);
+    rows += \`<div class="obj-prop-row"><div class="obj-prop-label">LogicalAnd</div>
+      <select class="obj-prop-select" id="op-la"><option value="false" \${props.LogicalAnd!=='true'?'selected':''}>false (OR)</option><option value="true" \${props.LogicalAnd==='true'?'selected':''}>true (AND)</option></select></div>\`;
+  } else if (type === 'Tracer' || type === 'XmlTracer' || type === 'EventLogger') {
+    rows += field('Message', 'op-msg', props.Message, true);
+    rows += sel('Level', 'op-lvl', props.Level||'INFO', ['INFO','WARNING','ERROR','DEBUG']);
+  } else if (type === 'Assignment') {
+    rows = \`<div class="obj-note">Assignment não tem propriedades próprias — configure usando a aba Links.</div>\`;
+  } else if (type === 'Pause') {
+    rows += field('Delay (ms)', 'op-delay', props.Delay||'1000', false);
+  } else {
+    const keys = Object.keys(props).filter(k => !k.startsWith('@'));
+    if (keys.length) {
+      rows += keys.map(k => field(k, 'op-gen-'+k, String(props[k]||''), false)).join('');
+    } else {
+      rows = \`<div class="obj-note">Sem propriedades configuráveis para \${esc(type)}.</div>\`;
+    }
+  }
+
+  cont.innerHTML = \`<div class="obj-props-wrap">
+    \${rows}
+    \${type !== 'Assignment' ? '<button class="obj-save-btn" id="btn-obj-save">💾 Salvar Objeto</button>' : ''}
+  </div>\`;
+
+  document.getElementById('btn-obj-save')?.addEventListener('click', () => {
+    const newProps = { ...props };
+    // Collect values from inputs
+    cont.querySelectorAll('.obj-prop-input, .obj-prop-select').forEach(inp => {
+      const key = inp.id.replace('op-', '').replace('gen-','');
+      const realKey = {qt:'QueryTemplate',srv:'Server',mode:'Mode',rc:'RowCount',to:'Timeout',
+        cpa:'ConnPropAlias',cra:'CredentialAlias',fn:'FunctionName',ac:'AutoCommit',
+        tp:'TransactionPath',i1:'Input1',i2:'Input2',la:'LogicalAnd',msg:'Message',lvl:'Level',
+        delay:'Delay'}[key] || key;
+      newProps[realKey] = inp.value;
+    });
+    vscode.postMessage({ type: 'editActionProps', actionName, props: newProps });
+  });
 }
 
 // ─── Run Transaction modal ──────────────────────────────────────────────────

@@ -1,0 +1,56 @@
+{
+  "uploadOnSave": false,
+  "downloadOnOpen": false,
+  "systems": [
+    {
+      "name": "melita",
+      "severity": "2-high",
+      "isMain": true,
+      "host": "10.8.1.12",
+      "port": 51200,
+      "username": "mrti",
+      "password": "C+Abifre-eT5"
+    }
+  ],
+  "removeFromLocalPath": [],
+  "remotePath": "Default/",
+  "ignore": [
+    "**/.git/**",
+    "**/.svn/**",
+    "**/.vscode/**",
+    "**/node_modules/**",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/*.tmp",
+    "**/*.temp"
+  ],
+  "include": [],
+  "useRootConfig": false,
+  "rootConfig": "../",
+  "gitCommitOnUpload": "ask",
+  "mcp": {
+    "enabled": true,
+    "clients": {
+      "claudeCode": true,
+      "geminiCLI": true,
+      "copilotCLI": true,
+      "copilotVSCode": true
+    },
+    "policy": {
+      "mode": "write",
+      "allowDelete": true,
+      "allowSqlWrite": false,
+      "allowSqlDDL": false,
+      "allowTrxRun": true,
+      "confirmToken": true,
+      "protectedPaths": [
+        "Default/PROD/**",
+        "**/Backup/**"
+      ],
+      "severityBlock": "3-critical",
+      "severityRequireToken": "2-high",
+      "git": "inherit",
+      "audit": true
+    }
+  }
+}

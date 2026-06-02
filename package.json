@@ -13,7 +13,7 @@
   },
   "homepage": "https://github.com/TaBayram/vscode-miisync",
   "icon": "resources/icon.png",
-  "version": "0.14.1",
+  "version": "0.14.2",
   "license": "MIT",
   "engines": {
     "vscode": "^1.83.1"
@@ -787,7 +787,11 @@
           },
           "miisync.settings.gitCommitOnUpload": {
             "type": "string",
-            "enum": ["disabled", "ask", "always"],
+            "enum": [
+              "disabled",
+              "ask",
+              "always"
+            ],
             "enumDescriptions": [
               "Never create git commits after upload.",
               "Ask each time whether to create a git commit after upload.",
@@ -799,8 +803,28 @@
           },
           "miisync.tqsqHiddenTablePrefixes": {
             "type": "array",
-            "items": { "type": "string" },
-            "default": ["BC_","CMST_","CR_","EP_","IDP_","ITSAM_","J2EE_","JPL_","MPM_","SAML2_","SEC_","SMET_","SR_","TC_","UME_","XI_","XMII_"],
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "BC_",
+              "CMST_",
+              "CR_",
+              "EP_",
+              "IDP_",
+              "ITSAM_",
+              "J2EE_",
+              "JPL_",
+              "MPM_",
+              "SAML2_",
+              "SEC_",
+              "SMET_",
+              "SR_",
+              "TC_",
+              "UME_",
+              "XI_",
+              "XMII_"
+            ],
             "description": "Prefixos de tabelas ocultados no Schema Browser do TQSQ Editor (marcado = oculto).",
             "order": 4
           }
@@ -938,7 +962,9 @@
         "viewType": "miisync.trxViewer",
         "displayName": "MII TRX Viewer",
         "selector": [
-          { "filenamePattern": "*.trx" }
+          {
+            "filenamePattern": "*.trx"
+          }
         ],
         "priority": "default"
       },
@@ -946,7 +972,9 @@
         "viewType": "miisync.tqsqEditor",
         "displayName": "MII Query Editor",
         "selector": [
-          { "filenamePattern": "*.tqsq" }
+          {
+            "filenamePattern": "*.tqsq"
+          }
         ],
         "priority": "default"
       }
@@ -962,14 +990,15 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run esbuild-base -- --minify",
+    "vscode:prepublish": "npm run esbuild-base -- --minify && npm run esbuild-mcp -- --minify",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
     "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
-    "esbuild": "npm run esbuild-base -- --sourcemap",
+    "esbuild-mcp": "esbuild ./src/mcp/server.ts --bundle --outfile=out/mcp/server.js --format=cjs --platform=node",
+    "esbuild": "npm run esbuild-base -- --sourcemap && npm run esbuild-mcp -- --sourcemap",
     "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
     "test-compile": "tsc -p ./"
   },
@@ -987,14 +1016,16 @@
     "fs-extra": "^11.1.1",
     "glob": "^8.1.0",
     "mocha": "^10.2.0",
-    "typescript": "^4.9.5"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node-fetch": "^2.6.3",
     "fast-xml-parser": "^4.2.0",
     "ignore": "^5.2.4",
     "joi": "^17.9.1",
     "node-fetch": "^2.6.9",
-    "p-limit": "^3.1.0"
+    "p-limit": "^3.1.0",
+    "zod": "^3.22.4"
   }
 }
