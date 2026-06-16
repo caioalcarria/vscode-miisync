@@ -801,6 +801,12 @@
             "description": "Controls whether MiiSync creates a git commit after a successful file upload.",
             "order": 3
           },
+          "miisync.settings.allowSensitiveOperations": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "**Allow sensitive MCP operations** (EDIT, DELETE, SQL WRITE/DDL).\n\nWhen disabled, the MCP agent can only read files. Enable this to allow the agent to create, edit, or delete files and run write SQL queries. A confirmation prompt will appear before enabling.",
+            "order": 4
+          },
           "miisync.tqsqHiddenTablePrefixes": {
             "type": "array",
             "items": {

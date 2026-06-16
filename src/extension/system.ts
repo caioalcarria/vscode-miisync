@@ -40,14 +40,12 @@ export interface McpPolicy {
     allowSqlDDL?: boolean,
     /** Permite executar transações (trx_run) */
     allowTrxRun?: boolean,
-    /** Exige confirm-token (2 etapas) nas operações gated */
-    confirmToken?: boolean,
+    /** Permite operações sensíveis (EDIT, DELETE, SQL WRITE/DDL) sem bloqueio por token */
+    allowSensitiveOperations?: boolean,
     /** Globs de caminhos protegidos — escrita/delete negada incondicionalmente */
     protectedPaths?: string[],
     /** Bloqueia operações destrutivas a partir deste severity (inclusive) */
     severityBlock?: Severity,
-    /** Exige token para EDIT/DELETE a partir deste severity (inclusive) */
-    severityRequireToken?: Severity,
     /** Commit no git ao subir: inherit (usa gitCommitOnUpload) | always | disabled */
     git?: McpGitMode,
     /** Liga o log de auditoria em .miisync/mcp-audit.log */

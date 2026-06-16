@@ -22,10 +22,9 @@ export interface NormalizedPolicy {
     allowSqlWrite: boolean;
     allowSqlDDL: boolean;
     allowTrxRun: boolean;
-    confirmToken: boolean;
+    allowSensitiveOperations: boolean;
     protectedPaths: string[];
-    severityBlockLevel: number;       // bloqueia destrutivo a partir deste nível
-    severityRequireTokenLevel: number; // exige token (EDIT/DELETE) a partir deste nível
+    severityBlockLevel: number; // bloqueia destrutivo a partir deste nível
     git: McpGitMode;
     audit: boolean;
 }
@@ -36,11 +35,10 @@ const DEFAULT_POLICY: NormalizedPolicy = {
     allowDelete: false,
     allowSqlWrite: false,
     allowSqlDDL: false,
-    allowTrxRun: true,           // execução de TRX liberada por decisão de projeto
-    confirmToken: true,
+    allowTrxRun: true,
+    allowSensitiveOperations: false,
     protectedPaths: [],
-    severityBlockLevel: 3,       // critical bloqueia destrutivo
-    severityRequireTokenLevel: 2, // high+ exige token p/ EDIT/DELETE
+    severityBlockLevel: 3,
     git: 'inherit',
     audit: true,
 };
@@ -53,14 +51,11 @@ export function normalizePolicy(raw?: RawMcpPolicy): NormalizedPolicy {
         allowSqlWrite: raw.allowSqlWrite ?? DEFAULT_POLICY.allowSqlWrite,
         allowSqlDDL: raw.allowSqlDDL ?? DEFAULT_POLICY.allowSqlDDL,
         allowTrxRun: raw.allowTrxRun ?? DEFAULT_POLICY.allowTrxRun,
-        confirmToken: raw.confirmToken ?? DEFAULT_POLICY.confirmToken,
+        allowSensitiveOperations: raw.allowSensitiveOperations ?? DEFAULT_POLICY.allowSensitiveOperations,
         protectedPaths: Array.isArray(raw.protectedPaths) ? raw.protectedPaths : DEFAULT_POLICY.protectedPaths,
         severityBlockLevel: raw.severityBlock !== undefined
             ? severityToLevel(raw.severityBlock)
             : DEFAULT_POLICY.severityBlockLevel,
-        severityRequireTokenLevel: raw.severityRequireToken !== undefined
-            ? severityToLevel(raw.severityRequireToken)
-            : DEFAULT_POLICY.severityRequireTokenLevel,
         git: raw.git ?? DEFAULT_POLICY.git,
         audit: raw.audit ?? DEFAULT_POLICY.audit,
     };

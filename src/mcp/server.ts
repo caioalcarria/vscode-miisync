@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -5,7 +7,6 @@ import { getMainSystem, readProjectConfig } from './configReader';
 import { login, MiiSession, readFile as clientReadFile, saveFile as clientSaveFile } from './miiClient';
 import { loadPolicy, NormalizedPolicy, severityToLevel } from './security/policy';
 import { decide, OpClass } from './security/guard';
-import { validateToken, confirmationResponse } from './security/token';
 import { backupRemote } from './security/backup';
 import { audit } from './security/audit';
 import { ToolCtx, ToolDef, ok, err } from './tools/types';
@@ -85,10 +86,10 @@ async function dispatch(tool: ToolDef, args: any): Promise<{ content: any[]; isE
     const ctx: ToolCtx = { session, ...staticCtx };
 
     // 1. Classifica a operação
-    let opClass: OpClass, target: string, preview: string | undefined;
+    let opClass: OpClass, target: string;
     try {
         const c = await tool.classify(args, ctx);
-        opClass = c.opClass; target = c.target; preview = c.preview;
+        opClass = c.opClass; target = c.target;
     } catch (e: any) {
         return err(`Erro ao classificar operação: ${e?.message || e}`);
     }
@@ -107,16 +108,7 @@ async function dispatch(tool: ToolDef, args: any): Promise<{ content: any[]; isE
         return err(`🚫 Operação negada: ${decision.reason}`);
     }
 
-    // 3. Confirm-token (2 etapas)
-    if (decision.requireToken) {
-        const provided = args?.confirm_token as string | undefined;
-        if (!validateToken(tool.name, target, provided)) {
-            audit(ctx.projectRoot, { op: opClass, tool: tool.name, target, result: 'denied', severity: ctx.severityLabel, detail: 'aguardando confirm_token' });
-            return err(confirmationResponse(tool.name, target, preview || `${opClass} ${target}`));
-        }
-    }
-
-    // 4. Backup antes de escrever/apagar
+    // 3. Backup antes de escrever/apagar
     if (decision.needBackup) {
         const backupClient = {
             readFile: (p: string) => clientReadFile(session, p),
@@ -166,6 +158,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
     await server.connect(new StdioServerTransport());
+
+    // Hot-reload da policy: zera o cache sempre que miisync.json mudar
+    const projectRoot = process.env.MIISYNC_PROJECT || process.cwd();
+    const configPath = path.join(projectRoot, '.vscode', 'miisync.json');
+    try {
+        fs.watch(configPath, () => {
+            _ctx = null;
+            process.stderr.write('[miisync-mcp] Config recarregada.\n');
+        });
+    } catch {
+        // arquivo pode não existir ainda; ignorar silenciosamente
+    }
 }
 
 main().catch((e) => {

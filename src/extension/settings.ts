@@ -6,7 +6,8 @@ export interface ExtensionSettings {
     refreshSession: boolean,
     requestLimit: number,
     showDiffNotification: boolean,
-    gitCommitOnUpload: 'disabled' | 'ask' | 'always'
+    gitCommitOnUpload: 'disabled' | 'ask' | 'always',
+    allowSensitiveOperations: boolean,
 }
 
 const defaultSettings: ExtensionSettings = {
@@ -14,7 +15,8 @@ const defaultSettings: ExtensionSettings = {
     refreshSession: true,
     requestLimit: 40,
     showDiffNotification: true,
-    gitCommitOnUpload: 'ask'
+    gitCommitOnUpload: 'ask',
+    allowSensitiveOperations: false,
 }
 
 class SettingsManager {
@@ -35,7 +37,8 @@ class SettingsManager {
                 refreshSession: config.get('refreshSession'),
                 requestLimit: config.get('requestLimit'),
                 showDiffNotification: config.get('showDiffNotification'),
-                gitCommitOnUpload: config.get('gitCommitOnUpload')
+                gitCommitOnUpload: config.get('gitCommitOnUpload'),
+                allowSensitiveOperations: config.get('allowSensitiveOperations'),
             }
         }
     }

@@ -18,10 +18,9 @@ export interface RawMcpPolicy {
     allowSqlWrite?: boolean;
     allowSqlDDL?: boolean;
     allowTrxRun?: boolean;
-    confirmToken?: boolean;
+    allowSensitiveOperations?: boolean;
     protectedPaths?: string[];
     severityBlock?: string;
-    severityRequireToken?: string;
     git?: 'inherit' | 'always' | 'disabled';
     audit?: boolean;
 }

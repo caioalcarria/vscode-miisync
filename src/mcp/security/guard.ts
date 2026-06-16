@@ -13,11 +13,10 @@ export type OpClass =
     | 'SQL_DDL';
 
 export interface GuardDecision {
-    allow: boolean;        // pode prosseguir (talvez exigindo token)
-    deny: boolean;         // negado incondicionalmente
-    requireToken: boolean; // precisa de confirm-token (2 etapas)
-    needBackup: boolean;   // fazer backup no servidor antes
-    reason?: string;       // motivo (para deny ou aviso)
+    allow: boolean;      // pode prosseguir
+    deny: boolean;       // negado incondicionalmente
+    needBackup: boolean; // fazer backup no servidor antes
+    reason?: string;     // motivo (para deny)
 }
 
 export interface GuardInput {
@@ -75,9 +74,11 @@ export function isInScope(targetPath: string, remotePath?: string): boolean {
 // ─── Decisão central ─────────────────────────────────────────────────────────
 
 const ALLOW = (over: Partial<GuardDecision> = {}): GuardDecision =>
-    ({ allow: true, deny: false, requireToken: false, needBackup: false, ...over });
+    ({ allow: true, deny: false, needBackup: false, ...over });
 const DENY = (reason: string): GuardDecision =>
-    ({ allow: false, deny: true, requireToken: false, needBackup: false, reason });
+    ({ allow: false, deny: true, needBackup: false, reason });
+
+const SENSITIVE_DENIED = 'Operações sensíveis desabilitadas. Habilite em VS Code › Configurações › MiiSync › Allow Sensitive Operations.';
 
 export function decide(input: GuardInput): GuardDecision {
     const { opClass, policy, severityLevel, path, remotePath } = input;
@@ -106,46 +107,39 @@ export function decide(input: GuardInput): GuardDecision {
         return DENY('Modo readonly: operações de escrita/execução desabilitadas.');
     }
 
-    const tokenBySeverity = policy.confirmToken && severityLevel >= policy.severityRequireTokenLevel;
-
     // 5. Lógica por classe
     switch (opClass) {
         case 'CREATE':
-            // Criar item novo: livre até high; token em critical (>= severityBlock)
-            if (severityLevel >= policy.severityBlockLevel) {
-                return ALLOW({ requireToken: policy.confirmToken });
+            if (severityLevel >= policy.severityBlockLevel && !policy.allowSensitiveOperations) {
+                return DENY(SENSITIVE_DENIED);
             }
             return ALLOW();
 
         case 'EDIT':
-            // Sobrescrever existente: backup sempre; token a partir de severityRequireToken
-            return ALLOW({ needBackup: true, requireToken: tokenBySeverity });
+            if (!policy.allowSensitiveOperations) return DENY(SENSITIVE_DENIED);
+            return ALLOW({ needBackup: true });
 
         case 'DELETE':
             if (!policy.allowDelete) return DENY('DELETE desabilitado pela policy (allowDelete=false).');
-            if (severityLevel >= policy.severityBlockLevel) {
-                return DENY('DELETE bloqueado em sistema critical.');
-            }
-            // Delete sempre exige token + backup (quando permitido)
-            return ALLOW({ needBackup: true, requireToken: policy.confirmToken });
+            if (severityLevel >= policy.severityBlockLevel) return DENY('DELETE bloqueado em sistema critical.');
+            if (!policy.allowSensitiveOperations) return DENY(SENSITIVE_DENIED);
+            return ALLOW({ needBackup: true });
 
         case 'EXECUTE_TRX':
             if (!policy.allowTrxRun) return DENY('Execução de TRX desabilitada (allowTrxRun=false).');
-            return ALLOW(); // sem token por decisão de projeto
+            return ALLOW();
 
         case 'SQL_WRITE':
             if (!policy.allowSqlWrite) return DENY('SQL write desabilitado (allowSqlWrite=false).');
-            if (severityLevel >= policy.severityBlockLevel) {
-                return DENY('SQL write bloqueado em sistema critical.');
-            }
-            return ALLOW({ requireToken: tokenBySeverity });
+            if (severityLevel >= policy.severityBlockLevel) return DENY('SQL write bloqueado em sistema critical.');
+            if (!policy.allowSensitiveOperations) return DENY(SENSITIVE_DENIED);
+            return ALLOW();
 
         case 'SQL_DDL':
             if (!policy.allowSqlDDL) return DENY('SQL DDL desabilitado (allowSqlDDL=false).');
-            if (severityLevel >= policy.severityBlockLevel) {
-                return DENY('SQL DDL bloqueado em sistema critical.');
-            }
-            return ALLOW({ requireToken: policy.confirmToken });
+            if (severityLevel >= policy.severityBlockLevel) return DENY('SQL DDL bloqueado em sistema critical.');
+            if (!policy.allowSensitiveOperations) return DENY(SENSITIVE_DENIED);
+            return ALLOW();
 
         default:
             return DENY(`Classe de operação desconhecida: ${opClass}`);
